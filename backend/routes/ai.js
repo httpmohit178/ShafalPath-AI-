@@ -1,25 +1,24 @@
 const express = require('express');
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
-const { GoogleGenAI } = require('@google/genai');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const { completeWeeklyChallenge } = require('../utils/weeklyChallenge');
+const { localInterviewReply, localMentorReply } = require('../utils/localAi');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
-const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-const getAI = () => {
-  if (!process.env.GEMINI_API_KEY) {
-    const error = new Error('AI is not configured. Add GEMINI_API_KEY to backend/.env and restart the server.');
-    error.status = 503;
-    throw error;
-  }
-  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-};
+const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const generate = async (prompt, json = false) => {
-  const result = await getAI().models.generateContent({ model, contents: prompt, ...(json ? { config: { responseMimeType: 'application/json' } } : {}) });
-  return result.text || '';
+  if (!process.env.GROQ_API_KEY) throw new Error('Groq is not configured. Add GROQ_API_KEY to backend/.env.');
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.4, ...(json ? { response_format: { type: 'json_object' } } : {}) })
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error?.message || `Groq request failed (${response.status}).`);
+  return payload.choices?.[0]?.message?.content || '';
 };
 const parseJson = (text) => JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
 const respondError = (res, err) => {
@@ -31,8 +30,8 @@ router.post('/chat', auth, async (req, res) => {
   try {
     const u = await User.findById(req.user.id);
     const reply = await generate(`You are Margdarshak, a practical placement mentor. Student: ${u?.name || 'Candidate'}, target role: ${u?.targetRole || 'SDE'}, XP: ${u?.xp || 0}. Answer clearly and concisely. Question: ${req.body.message || ''}`);
-    res.json({ reply });
-  } catch (err) { respondError(res, err); }
+    res.json({ reply, mode: 'groq' });
+  } catch (err) { res.json({ reply: localMentorReply(req.body.message), mode: 'local' }); }
 });
 
 router.post('/interview', auth, async (req, res) => {
@@ -43,8 +42,12 @@ router.post('/interview', auth, async (req, res) => {
     const prompt = userAnswer
       ? `You are Aria, a warm but rigorous interviewer for the ${role} role, interview focus ${round}. This may be a technical or non-technical role; ask realistic role-relevant questions and score fairly. Candidate resume context: ${resumeContext || 'No resume uploaded yet; use the selected role and conversation only.'} Candidate profile skills: ${(candidate?.skills || []).join(', ')}. Review conversation: ${JSON.stringify(history).slice(-6000)}. Latest answer: ${JSON.stringify(userAnswer)}. Return JSON with score (integer 1-10 based on relevance, clarity, evidence, and role fit), feedback (two specific sentences: one strength and one actionable improvement), and nextQuestion (one role-specific follow-up; use resume details when relevant). Do not invent candidate experience.`
       : `You are Aria, an encouraging interviewer for the ${role} role, interview focus ${round}. Candidate resume context: ${resumeContext || 'No resume uploaded yet; begin with role-specific experience questions.'} Candidate skills: ${(candidate?.skills || []).join(', ')}. Ask a first question grounded in the resume if possible; otherwise ask a specific question appropriate for this role. Support non-technical careers too. Return JSON: {"nextQuestion":"...","score":null,"feedback":""}.`;
-    res.json(parseJson(await generate(prompt, true)));
-  } catch (err) { respondError(res, err); }
+    res.json({ ...localInterviewReply({ role, round, userAnswer, resumeText: candidate?.resumeText }), ...parseJson(await generate(prompt, true)), mode: 'groq' });
+  } catch (err) {
+    const { role = 'Software Development Engineer', round = 'Experience & projects', history = [], userAnswer } = req.body;
+    const candidate = await User.findById(req.user.id).select('resumeText').catch(() => null);
+    res.json({ ...localInterviewReply({ role, round, userAnswer, resumeText: candidate?.resumeText }), mode: 'local' });
+  }
 });
 
 router.post('/analyze-resume', auth, upload.single('resumePdf'), async (req, res) => {
@@ -118,8 +121,8 @@ router.post('/run-code', auth, async (req, res) => {
     const execRes = await fetch('https://emkc.org/api/v2/piston/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: runtime, version, files: [{ content: code }], stdin }) });
     if (!execRes.ok) throw new Error(`Code runner returned ${execRes.status}. Try again shortly.`);
     const execData = await execRes.json();
-    let aiReview = 'Add GEMINI_API_KEY to backend/.env to enable AI complexity coaching.';
-    if (process.env.GEMINI_API_KEY) {
+    let aiReview = 'Local code execution is ready. Add GROQ_API_KEY to backend/.env for AI complexity coaching.';
+    if (process.env.GROQ_API_KEY) {
       try { aiReview = await generate(`Review this ${language} solution for ${problemTitle}:\n${code}\nGive time complexity, space complexity, and one useful improvement.`); }
       catch (err) { aiReview = `Code ran successfully; AI review unavailable: ${err.message}`; }
     }

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Flame, Zap, ListChecks, Map, Trophy } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../context/AuthContext';
+import { Sparkles } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, levelInfo } = useAuth();
@@ -24,6 +25,8 @@ export default function Dashboard() {
           Analyze resume
         </Link>
       </div>
+
+      <Link to="/interview" className="aria-dashboard-card"><div className="aria-avatar" aria-hidden="true"><span className="aria-hair"/><span className="aria-eyes"><i/><i/></span><span className="aria-smile"/><span className="aria-glow"/></div><div><span className="aria-dashboard-kicker"><Sparkles size={13}/> PRACTICE WITH ARIA</span><h2>Ready for a quick interview round?</h2><p>Get five role-specific questions and actionable feedback. Local practice works even when AI is offline.</p></div><span className="aria-dashboard-cta">Start practice →</span></Link>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white p-6 rounded-2xl border border-gray-100 flex justify-between">

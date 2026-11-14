@@ -39,7 +39,7 @@ export default function MargdarshakChat() {
         <div className="w-80 sm:w-96 bg-white rounded-3xl shadow-2xl border border-orange-100 overflow-hidden mb-4">
           <div className="bg-gradient-to-r from-[#FF6B00] to-amber-500 p-4 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center"><Compass size={20} /></div>
+              <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center"><span className="aria-avatar" style={{ width: 32, height: 32 }}><span className="aria-hair"/><span className="aria-eyes"><i/><i/></span><span className="aria-smile"/><span className="aria-glow"/></span></div>
               <div>
                 <h4 className="font-bold text-sm">Margdarshak AI</h4>
                 <p className="text-xs text-orange-100">● Your placement guide · {user?.demoMode ? 'interactive preview' : 'online'}</p>

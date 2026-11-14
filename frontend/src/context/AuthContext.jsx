@@ -27,11 +27,11 @@ const completeDemoWeekly = (id) => {
 };
 const getFormValue = (form, key) => form instanceof FormData ? form.get(key) : form?.[key];
 const runJavascriptLocally = (code, expectedOutput) => new Promise((resolve) => {
-  if (typeof Worker === 'undefined') return resolve({ stdout: '', stderr: 'Browser code runner is unavailable. Start the backend for code execution.', exitCode: 1, aiReview: 'AI code coaching is available when GEMINI_API_KEY is configured.' });
+  if (typeof Worker === 'undefined') return resolve({ stdout: '', stderr: 'Browser code runner is unavailable. Start the backend for code execution.', exitCode: 1, aiReview: 'AI code coaching is available when GROQ_API_KEY is configured.' });
   const workerSource = `self.onmessage = ({ data }) => { const lines = []; console.log = (...values) => lines.push(values.map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(' ')); try { (new Function(data.code))(); const stdout = lines.join('\\n'); const last = stdout.trim().split(/\\r?\\n/).filter(Boolean).at(-1) || ''; self.postMessage({ stdout, stderr: '', exitCode: 0, passedTest: data.expectedOutput == null ? null : last === String(data.expectedOutput).trim() }); } catch (error) { self.postMessage({ stdout: lines.join('\\n'), stderr: error?.stack || String(error), exitCode: 1, passedTest: false }); } };`;
   const blobUrl = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
   const worker = new Worker(blobUrl); let finished = false;
-  const finish = (result) => { if (finished) return; finished = true; clearTimeout(timer); worker.terminate(); URL.revokeObjectURL(blobUrl); resolve({ ...result, aiReview: 'Connect the backend and add GEMINI_API_KEY for AI complexity coaching.' }); };
+  const finish = (result) => { if (finished) return; finished = true; clearTimeout(timer); worker.terminate(); URL.revokeObjectURL(blobUrl); resolve({ ...result, aiReview: 'Connect the backend and add GROQ_API_KEY for AI complexity coaching.' }); };
   const timer = setTimeout(() => finish({ stdout: '', stderr: 'Execution timed out after 2 seconds.', exitCode: 1 }), 2000);
   worker.onmessage = ({ data }) => finish(data); worker.onerror = (error) => finish({ stdout: '', stderr: error.message || 'Code execution failed.', exitCode: 1, passedTest: false }); worker.postMessage({ code, expectedOutput });
 });

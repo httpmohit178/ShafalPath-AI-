@@ -22,8 +22,9 @@ if (process.env.MONGO_URI) {
 app.get('/api/health', (_req, res) => res.json({
   status: 'ok',
   database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-  aiConfigured: Boolean(process.env.GEMINI_API_KEY),
-  model: process.env.GEMINI_MODEL || 'gemini-3.8-flash'
+  aiConfigured: Boolean(process.env.GROQ_API_KEY),
+  provider: 'groq',
+  model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
 }));
 
 app.use('/api/auth', authRoutes);
