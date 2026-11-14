@@ -44,12 +44,6 @@ API.interceptors.response.use((r) => r, (error) => {
   try { if (typeof error.config?.data === 'string') body = JSON.parse(error.config.data); } catch { body = {}; }
   const local = getDemoUser();
   const ok = (data) => Promise.resolve({ data, status: 200, config: error.config });
-  if (localFallback && url.includes('/auth/')) {
-    const user = local ? { ...local, demoMode: true } : { _id: 'demo-user', name: getFormValue(error.config?.data, 'name') || 'Alex Morgan', email: getFormValue(error.config?.data, 'email') || 'hello@example.com', targetRole: getFormValue(error.config?.data, 'targetRole') || 'Software Engineer', xp: 40, demoMode: true, badges: ['First Step'], dsaSolved: [], streak: { current: 1, best: 1 }, interviewHistory: [], activityLog: [], roadmap: { plan: [] }, dailyQuests: {} };
-    localStorage.setItem('safalpath_demo_user', JSON.stringify(user));
-    localStorage.setItem('safalpath_token', 'demo-session');
-    return ok({ user, token: 'demo-session', levelInfo: getDemoLevel(user.xp) });
-  }
   if (localFallback && url.includes('/ai/interview')) {
     return ok(localInterviewReply({ ...body, resumeText: local?.resumeText || '' }));
   }
@@ -136,9 +130,8 @@ export function AuthProvider({ children }) {
         setLevelInfo(res.data.levelInfo);
       })
       .catch(() => {
-        const demo = JSON.parse(localStorage.getItem('safalpath_demo_user') || 'null');
-        if (demo && token === 'demo-session') setUser(demo);
-        else localStorage.removeItem('safalpath_token');
+        localStorage.removeItem('safalpath_token');
+        localStorage.removeItem('safalpath_demo_user');
       })
       .finally(() => setLoading(false));
   }, []);
@@ -150,6 +143,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem('safalpath_token');
+    localStorage.removeItem('safalpath_demo_user');
     setUser(null);
   };
 

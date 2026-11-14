@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 const User = require('../models/User');
 const { completeWeeklyChallenge } = require('../utils/weeklyChallenge');
 const { localInterviewReply, localMentorReply } = require('../utils/localAi');
+const { auditResume, localResumeAnalysis } = require('../utils/resumeReview');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -57,16 +58,31 @@ router.post('/analyze-resume', auth, upload.single('resumePdf'), async (req, res
       if (req.file.mimetype === 'application/pdf') resumeText = (await pdfParse(req.file.buffer)).text;
       else resumeText = req.file.buffer.toString('utf8');
     }
+    resumeText = resumeText.replace(/\u0000/g, '').replace(/\r\n?/g, '\n').trim();
     if (!resumeText.trim()) return res.status(400).json({ error: 'Upload a text-based PDF or paste your resume text first.' });
+    if (req.file?.mimetype === 'application/pdf' && resumeText.replace(/\s/g, '').length < 40) return res.status(422).json({ error: 'This PDF has little or no selectable text. It may be scanned or image-only; run OCR first or paste the resume text.' });
     const targetRole = req.body.targetRole || 'Software Engineer';
-    const analysis = parseJson(await generate(`Review this resume for the ${targetRole} role. Return valid JSON fields: atsScore (integer 0-100), summary (2-3 sentences), skills (only skills found in the resume), missingSkills (important role skills absent), strengths (evidence from the resume), issues (objects {issue, whyItHurts, fix}; include grammar, unclear dates, weak bullets, missing links/metrics only if actually present), skillGaps (objects {skill, whyItMatters, nextStep}), experienceInsights (array), improvements (specific edits), suggestedProjects (array), correctedResume (complete ATS-friendly rewrite with sections Contact, Summary, Skills, Experience, Projects, Education; preserve all facts, never invent employers, education, dates, skills or metrics; use clear [Add ...] placeholders where evidence is missing). Keep the rewrite plain text and ready to paste into a document. Resume: ${resumeText.slice(0, 18000)}`, true));
+    let analysis;
+    let aiMode = 'groq';
+    try {
+      analysis = parseJson(await generate(`Perform a careful, role-specific resume audit for ${targetRole}. Examine every section and bullet. Check contact details, links, spelling and grammar, inconsistent formatting, missing section headings, vague claims, first-person language, weak action verbs, unexplained gaps or dates, duplicated content, ATS readability, missing outcomes, unsupported claims and role-specific keywords. Return JSON fields: atsScore (integer 0-100), summary (2-3 sentences), skills (only skills present), missingSkills (role-relevant skills absent), strengths (evidence from the text), issues (objects {issue, whyItHurts, fix}; report every issue you can substantiate), skillGaps (objects {skill, whyItMatters, nextStep}), experienceInsights (array), improvements (specific edits), suggestedProjects (array), correctedResume (complete job-application-ready plain-text rewrite with Contact, Summary, Skills, Experience, Projects and Education sections; preserve every fact, never invent employers, education, dates, skills, results or metrics; put uncertain or absent details in clear [Add ...] placeholders). Return only valid JSON. Resume text: ${resumeText.slice(0, 18000)}`, true));
+    } catch {
+      analysis = localResumeAnalysis(resumeText, targetRole);
+      aiMode = 'local';
+    }
+    const auditIssues = auditResume(resumeText, targetRole);
+    const existingIssues = Array.isArray(analysis.issues) ? analysis.issues : [];
+    const issueKeys = new Set(existingIssues.map((item) => String(item.issue || '').toLowerCase()));
+    analysis.issues = [...existingIssues, ...auditIssues.filter((item) => !issueKeys.has(item.issue.toLowerCase()))];
+    analysis.atsScore = Math.max(0, Math.min(100, Number(analysis.atsScore) || 0));
+    if (!analysis.correctedResume) analysis.correctedResume = localResumeAnalysis(resumeText, targetRole).correctedResume;
     const user = await User.findById(req.user.id);
     user.resumeText = resumeText.slice(0, 20000); user.resumeRewrite = analysis.correctedResume || ''; user.targetRole = targetRole; user.atsScore = analysis.atsScore; user.skills = analysis.skills || []; user.missingSkills = analysis.missingSkills || [];
     if (!user.badges.includes('Resume Ready')) user.badges.push('Resume Ready');
     if (analysis.atsScore >= 80 && !user.badges.includes('ATS Ace')) user.badges.push('ATS Ace');
     completeWeeklyChallenge(user, 'resume-refresh');
     await user.save();
-    res.json({ analysis, user, levelInfo: user.getLevelInfo() });
+    res.json({ analysis, user, levelInfo: user.getLevelInfo(), aiMode });
   } catch (err) { respondError(res, err); }
 });
 

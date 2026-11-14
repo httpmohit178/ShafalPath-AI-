@@ -19,7 +19,7 @@ import JobBoards from './pages/JobBoards';
 function ProtectedLayout() {
   const { user, loading } = useAuth();
   if (loading) return <div className="p-10 text-center">Loading SafalPath...</div>;
-  if (!user) return <Navigate to="/" replace />;
+  if (!user) return <Navigate to="/login" replace />;
 
   return (
     <div className="flex min-h-screen bg-[#FAF8F5]">
@@ -27,7 +27,7 @@ function ProtectedLayout() {
       <div className="flex-1 flex flex-col">
         <Topbar />
         <main className="p-8 max-w-5xl w-full mx-auto">
-          {user?.demoMode && <div className="demo-mode-banner"><span>INTERACTIVE DEMO</span><p>Your practice progress is saved in this browser. Connect MongoDB and add a Gemini API key to turn on live AI and sync your account.</p></div>}
+          {user?.demoMode && <div className="demo-mode-banner"><span>OFFLINE PRACTICE</span><p>You are signed in. Some tools are using local practice data while the backend is unavailable; reconnect to sync changes.</p></div>}
           <Outlet />
         </main>
       </div>

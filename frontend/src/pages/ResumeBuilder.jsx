@@ -3,7 +3,20 @@ import { Download, Eye, Printer, Save, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { API, useAuth } from '../context/AuthContext';
 
-const emptyDraft = (user) => ({ fullName: user?.resumeDraft?.fullName || user?.name || '', email: user?.resumeDraft?.email || user?.email || '', location: user?.resumeDraft?.location || '', title: user?.resumeDraft?.title || user?.targetRole || '', summary: user?.resumeDraft?.summary || '', skills: user?.resumeDraft?.skills || (user?.skills || []).join(', '), experience: user?.resumeDraft?.experience || user?.resumeText || '', projects: user?.resumeDraft?.projects || '', education: user?.resumeDraft?.education || '' });
+const resumeSection = (resume, headings) => {
+  const rows = String(resume || '').split(/\r?\n/);
+  const isHeading = (row) => headings.includes(row.trim().replace(/[:#]/g, '').toLowerCase());
+  const start = rows.findIndex(isHeading);
+  if (start < 0) return '';
+  let end = rows.length;
+  for (let i = start + 1; i < rows.length; i += 1) if (/^[A-Z][A-Z &/()-]{2,}:?$/.test(rows[i].trim())) { end = i; break; }
+  return rows.slice(start + 1, end).join('\n').trim();
+};
+const emptyDraft = (user) => {
+  const generated = user?.resumeRewrite || '';
+  const firstLine = generated.split(/\r?\n/).map((line) => line.trim()).find((line) => line && !/^(contact|professional summary|summary|skills|experience|projects|education)$/i.test(line));
+  return { fullName: user?.resumeDraft?.fullName || (firstLine && firstLine.length < 70 ? firstLine : '') || user?.name || '', email: user?.resumeDraft?.email || user?.email || (generated.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || ''), location: user?.resumeDraft?.location || '', title: user?.resumeDraft?.title || user?.targetRole || '', summary: user?.resumeDraft?.summary || resumeSection(generated, ['summary', 'professional summary', 'profile']), skills: user?.resumeDraft?.skills || resumeSection(generated, ['skills', 'technical skills']) || (user?.skills || []).join(', '), experience: user?.resumeDraft?.experience || resumeSection(generated, ['experience', 'work experience', 'professional experience']) || user?.resumeText || '', projects: user?.resumeDraft?.projects || resumeSection(generated, ['projects', 'selected projects']), education: user?.resumeDraft?.education || resumeSection(generated, ['education']) };
+};
 const sections = [['fullName', 'Full name', 'input'], ['email', 'Email', 'input'], ['location', 'Location', 'input'], ['title', 'Target title', 'input'], ['summary', 'Professional summary', 'textarea'], ['skills', 'Skills (comma separated)', 'textarea'], ['experience', 'Work experience', 'textarea'], ['projects', 'Projects', 'textarea'], ['education', 'Education', 'textarea']];
 export default function ResumeBuilder() {
   const { user, syncUser } = useAuth(); const [draft, setDraft] = useState(() => emptyDraft(user)); const [saving, setSaving] = useState(false); const [message, setMessage] = useState('');
