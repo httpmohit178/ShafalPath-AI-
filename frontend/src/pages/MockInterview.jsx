@@ -11,7 +11,7 @@ import {
   Loader2,
   Trophy,
 } from 'lucide-react';
-import API from '../context/AuthContext';
+import { API } from '../context/AuthContext';
 
 const ROLES = [
   'Software Development Engineer (SDE)',
@@ -162,7 +162,7 @@ export default function MockInterview() {
             <Mic className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">AI Mock Interviewer</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight">Practice with Aria</h1>
             <p className="text-xs opacity-70">
               Adaptive 5-question technical & behavioral rounds with instant 10-point scoring
             </p>

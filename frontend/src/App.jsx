@@ -12,6 +12,7 @@ import MockInterview from './pages/MockInterview';
 import DsaRecommender from './pages/DsaRecommender';
 import LiveCoding from './pages/LiveCoding';
 import Rewards from './pages/Rewards';
+import AuthPage from './pages/AuthPage';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -38,6 +39,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<AuthPage mode="login" />} />
+          <Route path="/register" element={<AuthPage mode="register" />} />
           <Route element={<ProtectedLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/resume" element={<ResumeAnalyzer />} />

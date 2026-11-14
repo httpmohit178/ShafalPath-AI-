@@ -24,7 +24,7 @@ export default function MargdarshakChat() {
     setLoading(true);
 
     try {
-      const { data } = await API.post('/ai/margdarshak', { message: text });
+      const { data } = await API.post('/ai/chat', { message: text });
       setMessages((prev) => [...prev, { sender: 'bot', text: data.reply }]);
     } catch {
       setMessages((prev) => [...prev, { sender: 'bot', text: 'Unable to reach Margdarshak right now. Make sure the backend server is running.' }]);
