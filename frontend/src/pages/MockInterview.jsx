@@ -1,168 +1,395 @@
-import { useState, useRef } from 'react';
-import { Mic, Volume2, Send, Flag } from 'lucide-react';
-import { API, useAuth } from '../context/AuthContext';
+import { useState, useRef, useEffect } from 'react';
+import {
+  Mic,
+  Send,
+  Sparkles,
+  Award,
+  RotateCcw,
+  CheckCircle2,
+  Briefcase,
+  Layers,
+  Loader2,
+  Trophy,
+} from 'lucide-react';
+import API from '../context/AuthContext';
+
+const ROLES = [
+  'Software Development Engineer (SDE)',
+  'Full Stack MERN Developer',
+  'Frontend React Developer',
+  'Backend Node.js Engineer',
+  'Data Analyst',
+];
+
+const ROUNDS = [
+  'Technical DSA & Problem Solving',
+  'Core CS (OS, DBMS, CN, OOPS)',
+  'System Design & Architecture',
+  'HR & Behavioral Round',
+];
 
 export default function MockInterview() {
-  const { syncUser } = useAuth();
-  const [roundType, setRoundType] = useState('Technical');
+  const [role, setRole] = useState(ROLES[0]);
+  const [round, setRound] = useState(ROUNDS[0]);
   const [started, setStarted] = useState(false);
-  const [questions, setQuestions] = useState([]);
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [answers, setAnswers] = useState([]);
-  const [input, setInput] = useState('');
-  const [handsFree, setHandsFree] = useState(true);
-  const [speaking, setSpeaking] = useState(false);
-  const [listening, setListening] = useState(false);
-  const [report, setReport] = useState(null);
-  const recognitionRef = useRef(null);
+  const [completed, setCompleted] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [answer, setAnswer] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [scores, setScores] = useState([]);
+  const chatEndRef = useRef(null);
 
-  const speakText = (text) => {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => {
-      setSpeaking(false);
-      if (handsFree) startListening();
-    };
-    window.speechSynthesis.speak(utterance);
-  };
+  const MAX_QUESTIONS = 5;
 
-  const startListening = () => {
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRec) return;
-    const rec = new SpeechRec();
-    rec.lang = 'en-IN';
-    rec.onstart = () => setListening(true);
-    rec.onresult = (e) => setInput(e.results[0][0].transcript);
-    rec.onend = () => setListening(false);
-    recognitionRef.current = rec;
-    rec.start();
-  };
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
 
   const startInterview = async () => {
-    setReport(null);
-    const { data } = await API.post('/ai/interview', { action: 'start', roundType });
-    setQuestions(data.questions);
-    setAnswers([]);
-    setCurrentIdx(0);
-    setStarted(true);
-    speakText(data.questions[0]);
-  };
+    setLoading(true);
+    setError('');
+    setMessages([]);
+    setScores([]);
+    setCompleted(false);
 
-  const submitAnswer = async () => {
-    if (!input.trim()) return;
-    const updated = [...answers, { question: questions[currentIdx], answer: input }];
-    setAnswers(updated);
-    setInput('');
+    try {
+      const res = await API.post('/ai/interview', {
+        role,
+        round,
+        history: [],
+        userAnswer: null,
+      });
 
-    if (currentIdx + 1 < questions.length) {
-      const next = currentIdx + 1;
-      setCurrentIdx(next);
-      speakText(questions[next]);
-    } else {
-      finishInterview(updated);
+      const firstQuestion =
+        res.data?.nextQuestion ||
+        `Welcome! Let's begin your ${round} interview for ${role}. Tell me briefly about your strongest technical project and the architecture decisions behind it.`;
+
+      setMessages([
+        {
+          sender: 'ai',
+          text: firstQuestion,
+          questionNumber: 1,
+        },
+      ]);
+      setStarted(true);
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+          'Unable to start AI Mock Interviewer. Check your backend connection and GEMINI_API_KEY.'
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
-  const finishInterview = async (finalAnswers = answers) => {
-    window.speechSynthesis.cancel();
-    const { data } = await API.post('/ai/interview', { action: 'score', roundType, answers: finalAnswers });
-    setReport(data.report);
-    syncUser(data.user, data.levelInfo);
-    setStarted(false);
+  const submitAnswer = async (e) => {
+    e.preventDefault();
+    if (!answer.trim() || loading) return;
+
+    const currentAnswer = answer.trim();
+    const updatedHistory = [...messages, { sender: 'user', text: currentAnswer }];
+    setMessages(updatedHistory);
+    setAnswer('');
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await API.post('/ai/interview', {
+        role,
+        round,
+        history: updatedHistory,
+        userAnswer: currentAnswer,
+      });
+
+      const score = typeof res.data?.score === 'number' ? res.data.score : 7;
+      const feedback =
+        res.data?.feedback ||
+        'Solid explanation. Try structuring your response with concrete time/space trade-offs.';
+      const nextQuestion = res.data?.nextQuestion;
+
+      const updatedScores = [...scores, score];
+      setScores(updatedScores);
+
+      const isFinal = updatedScores.length >= MAX_QUESTIONS;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: 'ai',
+          score,
+          feedback,
+          text: isFinal
+            ? 'That wraps up all 5 questions! Review your final scorecard below.'
+            : nextQuestion || 'Walk me through how you handle edge cases and scale bottlenecks.',
+          questionNumber: isFinal ? null : updatedScores.length + 1,
+        },
+      ]);
+
+      if (isFinal) {
+        setCompleted(true);
+      }
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+          'Failed to evaluate your response. Please try submitting again.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const resetSession = () => {
+    setStarted(false);
+    setCompleted(false);
+    setMessages([]);
+    setScores([]);
+    setAnswer('');
+    setError('');
+  };
+
+  const averageScore =
+    scores.length > 0
+      ? (scores.reduce((sum, s) => sum + s, 0) / scores.length).toFixed(1)
+      : '0.0';
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">AI Mock Interview</h1>
-        <p className="text-sm text-gray-500">Text or voice interview, 5 questions, scored on correctness, communication and confidence.</p>
-      </div>
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-orange-500/15 text-orange-500 flex items-center justify-center">
+            <Mic className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight">AI Mock Interviewer</h1>
+            <p className="text-xs opacity-70">
+              Adaptive 5-question technical & behavioral rounds with instant 10-point scoring
+            </p>
+          </div>
+        </div>
 
-      <div className="flex items-center gap-3">
-        <div className="bg-gray-100 p-1 rounded-xl inline-flex">
-          {['Technical', 'HR'].map((tab) => (
+        {started && (
+          <div className="flex items-center gap-3">
+            <div className="px-3.5 py-2 rounded-xl border theme-card text-xs font-bold flex items-center gap-2">
+              <Award className="w-4 h-4 text-orange-500" />
+              <span>
+                Avg Score: <span className="text-orange-500">{averageScore}/10</span>
+              </span>
+            </div>
             <button
-              key={tab}
-              onClick={() => setRoundType(tab)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${roundType === tab ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+              onClick={resetSession}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border theme-card text-xs font-semibold hover:border-orange-500 transition cursor-pointer"
             >
-              {tab}
+              <RotateCcw className="w-3.5 h-3.5" />
+              New Session
             </button>
-          ))}
-        </div>
-        <button onClick={() => speakText(questions[currentIdx] || 'Ready for your interview')} className="p-2.5 bg-white rounded-xl border border-orange-100 text-[#FF6B00]">
-          <Volume2 size={18} />
-        </button>
+          </div>
+        )}
       </div>
 
-      {!started && !report && (
-        <div className="bg-white p-12 rounded-3xl border border-orange-100 text-center space-y-4">
-          <div className="w-14 h-14 rounded-full bg-orange-50 text-[#FF6B00] flex items-center justify-center mx-auto">
-            <Mic size={26} />
-          </div>
-          <h3 className="font-bold text-lg">Ready for your {roundType} round?</h3>
-          <p className="text-sm text-gray-500">Answer by typing or speaking. You'll get feedback after each answer.</p>
-          <button onClick={startInterview} className="bg-[#FF6B00] text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600">
-            Start interview
-          </button>
+      {error && (
+        <div className="p-4 rounded-2xl border border-red-500/30 bg-red-500/10 text-red-500 text-xs font-medium">
+          {error}
         </div>
       )}
 
-      {started && (
-        <div className="space-y-4">
-          <div className="bg-[#121622] rounded-3xl p-8 text-center text-white relative overflow-hidden">
-            <div className={`w-24 h-24 rounded-full mx-auto border-4 ${speaking ? 'border-[#FF6B00] animate-pulse' : 'border-orange-500/40'} bg-gradient-to-b from-teal-700 to-slate-800 flex items-center justify-center text-3xl font-bold`}>
-              👩‍💼
-            </div>
-            <h4 className="font-bold mt-4">Aria · AI Interviewer</h4>
-            <p className="text-xs text-[#FF6B00] mt-1">{speaking ? 'ıllıl Speaking...' : listening ? '🎙️ Listening...' : 'Waiting for your answer'}</p>
+      {/* Setup Screen */}
+      {!started ? (
+        <div className="p-8 rounded-3xl border theme-card shadow-sm space-y-6">
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold">Configure Your Interview Round</h2>
+            <p className="text-xs opacity-70">
+              Select your target role and round focus. Margdarshak AI will adapt follow-up questions based on your answers.
+            </p>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-bold">Hands-free mode</p>
-              <p className="text-xs text-gray-400">Auto-listen after Aria finishes speaking</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider opacity-75">
+                <Briefcase className="w-3.5 h-3.5 text-orange-500" />
+                Target Role
+              </label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full p-3.5 rounded-2xl border theme-card text-sm font-medium focus:outline-none focus:border-orange-500"
+              >
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
             </div>
-            <input type="checkbox" checked={handsFree} onChange={(e) => setHandsFree(e.target.checked)} className="w-5 h-5 accent-[#FF6B00]" />
+
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider opacity-75">
+                <Layers className="w-3.5 h-3.5 text-orange-500" />
+                Interview Round
+              </label>
+              <select
+                value={round}
+                onChange={(e) => setRound(e.target.value)}
+                className="w-full p-3.5 rounded-2xl border theme-card text-sm font-medium focus:outline-none focus:border-orange-500"
+              >
+                {ROUNDS.map((rnd) => (
+                  <option key={rnd} value={rnd}>
+                    {rnd}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-orange-100 space-y-6">
-            <div className="flex justify-between text-xs font-semibold text-gray-500">
-              <span>Question {currentIdx + 1} of 5</span>
-              <button onClick={() => finishInterview()} className="flex items-center gap-1 hover:text-[#FF6B00]"><Flag size={14} /> End & score</button>
+          <div className="pt-2 flex flex-wrap items-center justify-between gap-4 border-t border-zinc-200 dark:border-zinc-800">
+            <div className="flex items-center gap-4 text-xs opacity-75">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" /> 5 Adaptive Questions
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-orange-500" /> Instant Feedback & Score
+              </span>
             </div>
 
-            <div className="bg-[#FAF8F5] p-4 rounded-2xl text-sm text-gray-800">
-              {questions[currentIdx]}
+            <button
+              onClick={startInterview}
+              disabled={loading}
+              className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold shadow-md transition hover:scale-105 disabled:opacity-50 cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Preparing Interviewer...
+                </>
+              ) : (
+                <>
+                  <Mic className="w-4 h-4" />
+                  Start Mock Interview
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Live Interview Room */
+        <div className="rounded-3xl border theme-card shadow-sm overflow-hidden flex flex-col">
+          {/* Room Banner */}
+          <div className="px-6 py-3.5 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 font-bold">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>{role}</span>
+              <span className="opacity-40">•</span>
+              <span className="text-orange-500">{round}</span>
             </div>
+            <span className="font-semibold opacity-70">
+              Progress: {Math.min(scores.length + (completed ? 0 : 1), MAX_QUESTIONS)} / {MAX_QUESTIONS} Questions
+            </span>
+          </div>
 
-            <div className="flex gap-2">
-              <button onClick={startListening} className={`p-3 rounded-xl border ${listening ? 'bg-red-50 border-red-400 text-red-600' : 'border-gray-200'}`}>
-                <Mic size={18} />
+          {/* Conversation Feed */}
+          <div className="p-6 space-y-5 max-h-[470px] overflow-y-auto">
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex flex-col ${
+                  msg.sender === 'user' ? 'items-end' : 'items-start'
+                } space-y-2`}
+              >
+                {msg.sender === 'ai' && msg.feedback && (
+                  <div className="max-w-2xl p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-emerald-500">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" /> Interviewer Feedback
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20">
+                        Score: {msg.score}/10
+                      </span>
+                    </div>
+                    <p className="text-xs leading-relaxed opacity-90">{msg.feedback}</p>
+                  </div>
+                )}
+
+                <div
+                  className={`max-w-2xl px-5 py-3.5 rounded-2xl text-sm leading-relaxed ${
+                    msg.sender === 'user'
+                      ? 'bg-orange-500 text-white font-medium shadow-sm'
+                      : 'border theme-card shadow-xs'
+                  }`}
+                >
+                  {msg.sender === 'ai' && msg.questionNumber && (
+                    <span className="block text-[11px] font-bold uppercase tracking-wider text-orange-500 mb-1">
+                      Question {msg.questionNumber} of {MAX_QUESTIONS}
+                    </span>
+                  )}
+                  <p className="whitespace-pre-line">{msg.text}</p>
+                </div>
+              </div>
+            ))}
+
+            {loading && (
+              <div className="flex items-center gap-2 text-xs font-medium opacity-70">
+                <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+                <span>Interviewer is evaluating your answer...</span>
+              </div>
+            )}
+
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Final Scorecard or Answer Box */}
+          {completed ? (
+            <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 bg-orange-500/5 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-orange-500 text-white flex items-center justify-center shadow-md">
+                  <Trophy className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold">
+                    Interview Completed! Final Score: {averageScore} / 10
+                  </h3>
+                  <p className="text-xs opacity-75">
+                    {Number(averageScore) >= 7.5
+                      ? 'Strong hire signal! Your explanations were structured and clear.'
+                      : 'Good practice run! Focus on deeper edge-case and complexity analysis.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={resetSession}
+                className="px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold shadow-md transition cursor-pointer"
+              >
+                Practice Another Round
               </button>
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submitAnswer()}
-                placeholder="Type your answer..."
-                className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm"
-              />
-              <button onClick={submitAnswer} className="bg-[#FF6B00] text-white px-4 rounded-xl"><Send size={18} /></button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {report && (
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 space-y-4">
-          <h3 className="font-bold text-lg">Interview Scorecard — Overall: {report.overall}/100</h3>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div className="p-4 bg-orange-50 rounded-2xl"><p className="text-xs text-gray-500">Correctness</p><p className="text-xl font-bold text-[#FF6B00]">{report.correctness}</p></div>
-            <div className="p-4 bg-emerald-50 rounded-2xl"><p className="text-xs text-gray-500">Communication</p><p className="text-xl font-bold text-emerald-700">{report.communication}</p></div>
-            <div className="p-4 bg-blue-50 rounded-2xl"><p className="text-xs text-gray-500">Confidence</p><p className="text-xl font-bold text-blue-700">{report.confidence}</p></div>
-          </div>
-          <p className="text-sm text-gray-600">{report.summary}</p>
+          ) : (
+            <form
+              onSubmit={submitAnswer}
+              className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex items-end gap-3"
+            >
+              <textarea
+                rows={2}
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitAnswer(e);
+                  }
+                }}
+                placeholder="Type your interview answer here... (Press Enter to send, Shift+Enter for new line)"
+                className="flex-1 p-3.5 rounded-2xl border theme-card text-sm focus:outline-none focus:border-orange-500 resize-none"
+              />
+              <button
+                type="submit"
+                disabled={loading || !answer.trim()}
+                className="px-5 py-3.5 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm flex items-center gap-2 shadow-md transition disabled:opacity-50 cursor-pointer"
+              >
+                <Send className="w-4 h-4" />
+                Send
+              </button>
+            </form>
+          )}
         </div>
       )}
     </div>
