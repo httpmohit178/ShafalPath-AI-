@@ -10,23 +10,61 @@ const { auditResume, localResumeAnalysis } = require('../utils/resumeReview');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
+const model = process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
+const fallbackModel = process.env.GROQ_FALLBACK_MODEL || DEFAULT_GROQ_MODEL;
 const codeRunnerUrl = process.env.CODE_RUNNER_URL || 'https://api.onlinecompiler.io/api/v2/piston/execute';
 const generate = async (prompt, json = false) => {
   if (!process.env.GROQ_API_KEY) throw new Error('Groq is not configured. Add GROQ_API_KEY to backend/.env.');
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.4, ...(json ? { response_format: { type: 'json_object' } } : {}) })
-  });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error?.message || `Groq request failed (${response.status}).`);
-  return payload.choices?.[0]?.message?.content || '';
+  const requestModel = async (modelId) => {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelId, messages: [{ role: 'user', content: prompt }], temperature: 0.4, ...(json ? { response_format: { type: 'json_object' } } : {}) })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.error?.message || `Groq request failed (${response.status}).`);
+      error.status = response.status;
+      throw error;
+    }
+    return payload.choices?.[0]?.message?.content || '';
+  };
+  try { return await requestModel(model); }
+  catch (err) {
+    const unavailableModel = [400, 403, 404].includes(err.status) && /model|access|permission/i.test(err.message);
+    if (!unavailableModel || model === fallbackModel) throw err;
+    console.warn(`Groq model ${model} unavailable; retrying with ${fallbackModel}.`);
+    return requestModel(fallbackModel);
+  }
 };
 const parseJson = (text) => JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
+const questionTokens = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ').split(/\s+/).filter((word) => word.length > 2 && !new Set(['aria', 'welcome', 'role', 'focus', 'tell', 'please', 'think', 'about', 'that', 'this', 'would', 'could', 'should', 'your', 'you', 'how', 'what', 'when', 'where', 'which', 'with', 'from', 'have', 'does', 'did', 'are', 'the', 'and', 'for', 'into', 'after', 'before', 'then', 'next', 'question', 'build', 'lets', 'experience']).has(word));
+const repeatsQuestion = (candidate, previousQuestions) => {
+  const candidateTokens = questionTokens(candidate);
+  if (!candidateTokens.length) return false;
+  return previousQuestions.some((previous) => {
+    const previousTokens = questionTokens(previous);
+    if (!previousTokens.length) return false;
+    const left = new Set(candidateTokens); const right = new Set(previousTokens);
+    const shared = [...left].filter((token) => right.has(token)).length;
+    const union = new Set([...left, ...right]).size;
+    return (left.size === right.size && shared === union) || (shared >= 4 && (shared / union >= 0.58 || shared / Math.min(left.size, right.size) >= 0.8));
+  });
+};
 const respondError = (res, err) => {
   console.error('AI request failed:', err.message);
   res.status(err.status || 502).json({ error: err.message || 'AI request failed. Check your API key and model configuration.' });
+};
+const localCodeReview = (language, code) => {
+  const text = String(code || '');
+  const loopCount = (text.match(/\b(for|while)\s*\(/g) || []).length + (text.match(/\bfor\s+\w+\s+in\b/g) || []).length;
+  const nested = loopCount >= 2 && /\b(for|while)\s*\([^)]*\)[\s\S]{0,700}\b(for|while)\s*\(/.test(text);
+  const hasLinearStructure = /\b(Map|Set|Array|List|vector|HashMap|dict|set)\b|\[\]/.test(text);
+  const complexity = nested ? 'The code appears to contain nested loops, so check whether its time cost grows near O(n²).' : loopCount ? 'The code appears to scan data in a loop, so its time cost may be O(n).' : 'The time complexity is unclear from a quick local scan; verify it against the largest input.';
+  const memory = hasLinearStructure ? 'It also appears to allocate a collection, which may use O(n) extra space.' : 'No obvious extra collection is visible, but verify the auxiliary space used by your approach.';
+  const suggestion = /TODO|pass\s*$|return\s*\{\s*\}|new int\[0\]/m.test(text) ? 'The starter still contains an unimplemented placeholder; finish the solution before submitting.' : 'Try edge cases such as empty/minimum input, duplicates, and the largest allowed input.';
+  return `Local code coach for ${language}: ${complexity} ${memory} ${suggestion}`;
 };
 
 router.post('/chat', auth, async (req, res) => {
@@ -66,7 +104,11 @@ router.post('/interview', auth, async (req, res) => {
     const generatedQuestion = typeof generated.nextQuestion === 'string' ? generated.nextQuestion.trim() : '';
     const normalizedQuestion = generatedQuestion.toLowerCase().replace(String(role).toLowerCase(), ' ');
     const projectQuestion = /\bprojects?\b|\bportfolio\b/i.test(normalizedQuestion) || /\bwhat (?:have you built|did you build)\b/i.test(normalizedQuestion);
-    const nextQuestion = generatedQuestion && (!projectQuestion || experienceRound) ? generatedQuestion.slice(0, 1200) : local.nextQuestion;
+    const generatedIsRepeated = repeatsQuestion(generatedQuestion, askedQuestions);
+    const localIsRepeated = repeatsQuestion(local.nextQuestion, askedQuestions);
+    const nextQuestion = generatedQuestion && !generatedIsRepeated && (!projectQuestion || experienceRound)
+      ? generatedQuestion.slice(0, 1200)
+      : localIsRepeated ? 'Please share one different example or approach you have not mentioned yet. What did you do, and what was the result?' : local.nextQuestion;
     res.json({ ...local, ...generated, score, feedback, nextQuestion, mode: 'groq' });
   } catch (err) {
     const { role = 'Software Development Engineer', round = 'Role skills & scenarios', userAnswer } = req.body;
@@ -190,10 +232,10 @@ router.post('/run-code', auth, async (req, res) => {
     const execRes = await fetch(codeRunnerUrl, { method: 'POST', headers: { Authorization: process.env.CODE_RUNNER_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ language: runtime, version, files: [{ content: code }], stdin }) });
     const execData = await execRes.json().catch(() => ({}));
     if (!execRes.ok) return res.status(execRes.status === 401 || execRes.status === 403 ? 503 : 502).json({ error: execData.message || execData.error || `Code runner returned ${execRes.status}. Check CODE_RUNNER_API_KEY and runner status.` });
-    let aiReview = 'Local code execution is ready. Add GROQ_API_KEY to backend/.env for AI complexity coaching.';
+    let aiReview = localCodeReview(language, code);
     if (process.env.GROQ_API_KEY) {
       try { aiReview = await generate(`Review this ${language} solution for ${problemTitle}:\n${code}\nGive time complexity, space complexity, and one useful improvement.`); }
-      catch (err) { aiReview = `Code ran successfully; AI review unavailable: ${err.message}`; }
+      catch (err) { console.warn('Groq code coach unavailable; returning local review:', err.message); }
     }
     const stdout = execData.run?.stdout || '';
     const lastOutput = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1) || '';

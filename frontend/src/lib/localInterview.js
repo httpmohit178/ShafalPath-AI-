@@ -35,6 +35,26 @@ function groupFor(role = '') {
   return 'general';
 }
 
+const INTERVIEW_STOP_WORDS = new Set(['aria', 'welcome', 'role', 'focus', 'tell', 'please', 'think', 'about', 'that', 'this', 'would', 'could', 'should', 'your', 'you', 'how', 'what', 'when', 'where', 'which', 'with', 'from', 'have', 'does', 'did', 'are', 'the', 'and', 'for', 'into', 'after', 'before', 'then', 'next', 'question', 'build', 'lets', 'experience']);
+const interviewQuestionTokens = (value) => String(value || '')
+  .replace(/^welcome!?\s*i['’]ll ask practice questions for [^.]+\.\s*/i, '')
+  .replace(/^let['’]s build on that:\s*/i, '')
+  .toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ').split(/\s+/)
+  .filter((word) => word.length > 2 && !INTERVIEW_STOP_WORDS.has(word));
+
+export function isRepeatedInterviewQuestion(candidate, previousQuestions = []) {
+  const candidateTokens = interviewQuestionTokens(candidate);
+  if (!candidateTokens.length) return false;
+  return previousQuestions.some((previous) => {
+    const previousTokens = interviewQuestionTokens(previous);
+    if (!previousTokens.length) return false;
+    const left = new Set(candidateTokens); const right = new Set(previousTokens);
+    const shared = [...left].filter((token) => right.has(token)).length;
+    const union = new Set([...left, ...right]).size;
+    return (left.size === right.size && shared === union) || (shared >= 4 && (shared / union >= 0.58 || shared / Math.min(left.size, right.size) >= 0.8));
+  });
+}
+
 export function localInterviewReply({ role, round, history = [], userAnswer: answer, resumeText }) {
   const group = groupFor(role);
   const questions = BANKS[group] || BANKS.general;
@@ -102,8 +122,16 @@ export function localInterviewReply({ role, round, history = [], userAnswer: ans
     }
     return base;
   };
+  const questionAsked = (question) => history.some((item) => item.sender === 'ai' && item.questionNumber && isRepeatedInterviewQuestion(question, [item.text]));
+  const nextUniqueQuestion = () => {
+    for (let offset = 0; offset < questions.length; offset += 1) {
+      const candidate = questionForRound(questionIndex + offset);
+      if (!questionAsked(candidate)) return candidate;
+    }
+    return `For a ${role} role, what is another important task or decision you have not discussed yet, and how would you approach it?`;
+  };
   if (!answer) {
-    const question = questionForRound(questionIndex);
+    const question = nextUniqueQuestion();
     return { score: null, feedback: '', nextQuestion: `Welcome! I’ll ask practice questions for ${role}. ${question}` };
   }
   const words = answer.trim().split(/\s+/).filter(Boolean).length;
@@ -112,6 +140,6 @@ export function localInterviewReply({ role, round, history = [], userAnswer: ans
   const score = Math.max(3, Math.min(10, 4 + Number(words >= 28) + Number(words >= 65) + Number(evidence) + Number(concrete)));
   const strength = words >= 28 ? 'You gave enough context to understand your approach.' : 'You answered directly and have a useful starting point.';
   const nextStep = concrete ? 'Make the outcome and your personal contribution even clearer.' : 'Add a specific example, the action you took, and a measurable result if you have one.';
-  const nextQuestion = questionForRound(questionIndex);
+  const nextQuestion = nextUniqueQuestion();
   return { score, feedback: `${strength} ${nextStep}`, nextQuestion: `Let’s build on that: ${nextQuestion}` };
 }

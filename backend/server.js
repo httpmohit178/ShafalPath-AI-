@@ -25,7 +25,8 @@ app.get('/api/health', (_req, res) => res.json({
   aiConfigured: Boolean(process.env.GROQ_API_KEY),
   codeRunnerConfigured: Boolean(process.env.CODE_RUNNER_API_KEY),
   provider: 'groq',
-  model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
+  model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+  fallbackModel: process.env.GROQ_FALLBACK_MODEL || 'openai/gpt-oss-120b'
 }));
 
 app.use('/api/auth', authRoutes);

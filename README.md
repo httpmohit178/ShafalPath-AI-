@@ -122,7 +122,8 @@ PORT=5000
 MONGO_URI=mongodb://127.0.0.1:27017/safalpath
 JWT_SECRET=replace-with-a-long-random-secret
 GROQ_API_KEY=your-private-groq-api-key
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
+GROQ_FALLBACK_MODEL=openai/gpt-oss-120b
 GROQ_TRANSCRIPTION_MODEL=whisper-large-v3-turbo
 CODE_RUNNER_URL=https://api.onlinecompiler.io/api/v2/piston/execute
 CODE_RUNNER_API_KEY=your-private-code-runner-api-key
@@ -132,7 +133,7 @@ Create a private API key from [OnlineCompiler.io](https://api.onlinecompiler.io/
 
 Keep `.env` private. Do not commit API keys or put them in frontend variables. Change the MongoDB connection string for a hosted database. Use a unique, long JWT secret in each environment.
 
-For a deployed app, set `GROQ_API_KEY`, `GROQ_MODEL`, and `GROQ_TRANSCRIPTION_MODEL` in the **backend service's environment-variable settings** (not the frontend/static-host settings), then redeploy/restart the backend. The public health route's `aiConfigured` field only confirms that a key value exists; it cannot confirm that the key is valid or has provider quota. Without a backend key, Aria continues with local role-specific interview questions and browser speech recognition where the browser supports it.
+For a deployed app, set `GROQ_API_KEY`, `GROQ_MODEL=openai/gpt-oss-120b`, `GROQ_FALLBACK_MODEL=openai/gpt-oss-120b`, and `GROQ_TRANSCRIPTION_MODEL` in the **backend service's environment-variable settings** (not the frontend/static-host settings), then redeploy/restart the backend. The backend retries a deprecated or inaccessible configured chat model with `GROQ_FALLBACK_MODEL`. The public health route's `aiConfigured` field only confirms that a key value exists; it cannot confirm that the key is valid or has provider quota. Without a backend key, Aria continues with local role-specific interview questions and browser speech recognition where the browser supports it.
 
 Start the backend:
 
