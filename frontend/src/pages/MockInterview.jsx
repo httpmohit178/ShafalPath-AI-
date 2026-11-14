@@ -15,12 +15,12 @@ export default function MockInterview() {
   const [started, setStarted] = useState(false); const [completed, setCompleted] = useState(false);
   const [messages, setMessages] = useState([]); const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [scores, setScores] = useState([]);
-  const [cameraOn, setCameraOn] = useState(false); const [listening, setListening] = useState(false); const [speaking, setSpeaking] = useState(true);
-  const chatEnd = useRef(null); const videoRef = useRef(null); const streamRef = useRef(null); const recognitionRef = useRef(null); const speechTranscriptRef = useRef(''); const answerBeforeSpeechRef = useRef('');
+  const [cameraOn, setCameraOn] = useState(false); const [recording, setRecording] = useState(false); const [dictating, setDictating] = useState(false); const [transcribing, setTranscribing] = useState(false); const [speaking, setSpeaking] = useState(true);
+  const chatEnd = useRef(null); const videoRef = useRef(null); const streamRef = useRef(null); const recorderRef = useRef(null); const audioChunksRef = useRef([]); const recognitionRef = useRef(null); const speechTranscriptRef = useRef(''); const answerBeforeSpeechRef = useRef('');
   const currentQuestion = messages.filter((m) => m.sender === 'ai' && m.questionNumber).length;
   const selectedRole = role === 'Other / custom role' ? (customRole.trim() || 'Professional') : role;
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
-  useEffect(() => () => { streamRef.current?.getTracks().forEach((track) => track.stop()); window.speechSynthesis?.cancel(); recognitionRef.current?.stop(); }, []);
+  useEffect(() => () => { if (recorderRef.current?.state === 'recording') { recorderRef.current.onstop = null; recorderRef.current.stop(); } streamRef.current?.getTracks().forEach((track) => track.stop()); window.speechSynthesis?.cancel(); recognitionRef.current?.stop(); }, []);
   const say = (text) => { if (!speaking || !window.speechSynthesis) return; window.speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(text); utterance.rate = 0.97; window.speechSynthesis.speak(utterance); };
 
   const startCamera = async () => {
@@ -29,19 +29,54 @@ export default function MockInterview() {
   };
   useEffect(() => { if (cameraOn && videoRef.current && streamRef.current) videoRef.current.srcObject = streamRef.current; }, [cameraOn, started]);
   const toggleCamera = () => { if (cameraOn) { streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null; setCameraOn(false); } else startCamera(); };
-  const toggleMic = () => {
+  const startBrowserDictation = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { setError('This browser does not provide speech recognition. Open the interview in a supported browser such as Chrome, allow microphone access, or type your answer.'); return; }
-    if (listening) { recognitionRef.current?.stop(); setListening(false); return; }
+    if (dictating) { recognitionRef.current?.stop(); setDictating(false); return; }
     const recognition = new SpeechRecognition(); recognition.lang = 'en-IN'; recognition.interimResults = true; recognition.continuous = true;
     speechTranscriptRef.current = ''; answerBeforeSpeechRef.current = answer.trim();
     recognition.onresult = (event) => {
       speechTranscriptRef.current = Array.from(event.results).map((result) => result[0].transcript).join(' ').trim();
       setAnswer([answerBeforeSpeechRef.current, speechTranscriptRef.current].filter(Boolean).join(' '));
     };
-    recognition.onerror = (event) => { setListening(false); const reason = event.error === 'not-allowed' || event.error === 'service-not-allowed' ? 'Allow microphone access in your browser settings, then try again.' : event.error === 'no-speech' ? 'Aria did not hear speech. Check your microphone and try again.' : 'Microphone speech recognition stopped. You can retry or type your answer.'; setError(reason); };
-    recognition.onend = () => setListening(false); recognitionRef.current = recognition;
-    try { recognition.start(); setListening(true); setError(''); } catch { setListening(false); setError('Could not start microphone input. Check microphone permissions and try again.'); }
+    recognition.onerror = (event) => { setDictating(false); const reason = event.error === 'not-allowed' || event.error === 'service-not-allowed' ? 'Allow microphone access in your browser settings, then try again.' : event.error === 'no-speech' ? 'Aria did not hear speech. Check your microphone and try again.' : 'Browser dictation stopped. You can retry or type your answer.'; setError(reason); };
+    recognition.onend = () => setDictating(false); recognitionRef.current = recognition;
+    try { recognition.start(); setDictating(true); setError(''); } catch { setDictating(false); setError('Could not start browser dictation. Check microphone permissions and try again.'); }
+  };
+  const transcribeRecording = async (blob, mimeType) => {
+    if (blob.size < 1200) { setError('The recording was too short or silent. Hold the microphone button, speak clearly, then stop it.'); return; }
+    setTranscribing(true); setError('');
+    try {
+      const extension = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const form = new FormData(); form.append('audio', blob, `aria-answer.${extension}`); form.append('language', 'en');
+      const { data } = await API.post('/ai/transcribe', form);
+      setAnswer((current) => [current.trim(), data.transcript.trim()].filter(Boolean).join(' '));
+    } catch (err) {
+      setError(err.response?.data?.error || 'Audio transcription failed. Use browser dictation below or type your answer.');
+    } finally { setTranscribing(false); }
+  };
+  const toggleMic = async () => {
+    if (dictating) { recognitionRef.current?.stop(); setDictating(false); return; }
+    if (recording) { recorderRef.current?.stop(); setRecording(false); return; }
+    if (transcribing) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { startBrowserDictation(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      streamRef.current = stream;
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type)) || '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorderRef.current = recorder; audioChunksRef.current = [];
+      recorder.ondataavailable = (event) => { if (event.data?.size) audioChunksRef.current.push(event.data); };
+      recorder.onerror = () => { stream.getTracks().forEach((track) => track.stop()); setRecording(false); setError('Microphone recording failed. Check the selected input device and permissions.'); };
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        audioChunksRef.current = []; stream.getTracks().forEach((track) => track.stop()); streamRef.current = null;
+        transcribeRecording(blob, recorder.mimeType || 'audio/webm');
+      };
+      recorder.start(250); setRecording(true); setError('');
+    } catch (err) {
+      setError(err.name === 'NotAllowedError' ? 'Microphone permission was blocked. Allow access in the browser address bar and try again.' : err.name === 'NotFoundError' ? 'No microphone was found. Connect a microphone or use browser dictation.' : 'Could not open the microphone. Check browser permissions and try again.');
+    }
   };
 
   const startInterview = async () => {
@@ -52,7 +87,7 @@ export default function MockInterview() {
   };
   const submitAnswer = async (e) => {
     e.preventDefault(); if (!answer.trim() || loading) return;
-    const submitted = answer.trim(); const history = [...messages, { sender: 'user', text: submitted }]; setMessages(history); setAnswer(''); setLoading(true); setError(''); recognitionRef.current?.stop(); setListening(false);
+    const submitted = answer.trim(); const history = [...messages, { sender: 'user', text: submitted }]; setMessages(history); setAnswer(''); setLoading(true); setError(''); recognitionRef.current?.stop(); setDictating(false); if (recorderRef.current?.state === 'recording') recorderRef.current.stop(); setRecording(false);
     try {
       const { data } = await API.post('/ai/interview', { role: selectedRole, round, resumeText: user?.resumeText || '', history, userAnswer: submitted });
       const score = Number.isFinite(data.score) ? data.score : 7; const updatedScores = [...scores, score]; setScores(updatedScores);
@@ -77,7 +112,7 @@ export default function MockInterview() {
       <div className="room-stage"><div className="aria-stage"><div className={`aria-avatar large ${loading ? 'is-speaking' : ''}`}><span className="aria-hair"/><span className="aria-eyes"><i/><i/></span><span className="aria-smile"/><span className="aria-glow"/></div><b>Aria</b><small>{loading ? 'Thinking about your answer…' : speaking ? 'Ready when you are' : 'Voice muted'}</small><div className="audio-wave"><i/><i/><i/><i/><i/></div></div><div className="camera-stage">{cameraOn ? <video ref={videoRef} autoPlay muted playsInline/> : <div className="camera-placeholder"><Camera size={27}/><b>Your camera is off</b><small>Turn it on to practice on camera. Video stays on this device.</small><button className="secondary-button" onClick={toggleCamera}>Enable camera</button></div>}<span>YOU · LOCAL PREVIEW</span></div></div>
       <div className="interview-progress"><div><span>Question {Math.min(currentQuestion, MAX_QUESTIONS)} of {MAX_QUESTIONS}</span><span>{Math.round((scores.length / MAX_QUESTIONS) * 100)}% complete</span></div><div><i style={{width:`${Math.max(12, scores.length / MAX_QUESTIONS * 100)}%`}}/></div></div>
       <div className="interview-feed">{messages.map((msg, idx) => <div key={idx} className={`interview-message ${msg.sender}`}><small>{msg.sender === 'ai' ? `ARIA${msg.questionNumber ? ` · QUESTION ${msg.questionNumber}` : ''}` : 'YOU'}</small><p>{msg.text}</p>{msg.feedback && <div className="feedback-box"><b><Sparkles size={14}/> Aria’s feedback <span>{msg.score}/10</span></b><p>{msg.feedback}</p></div>}</div>)}<div ref={chatEnd}/></div>
-      {completed ? <div className="interview-complete"><Trophy size={24}/><div><b>Round complete · {average}/10</b><p>XP and your practice score have been added to your profile.</p></div><button className="primary-button" onClick={reset}>Practice again</button></div> : <><form className="answer-form" onSubmit={submitAnswer}><button type="button" onClick={toggleMic} className={`mic-button ${listening ? 'listening' : ''}`} title={listening ? 'Stop Aria’s microphone' : 'Let Aria listen to your spoken answer'} aria-label={listening ? 'Stop microphone' : 'Speak your answer to Aria'}>{listening ? <MicOff size={19}/> : <Mic size={19}/>}</button><textarea rows={2} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={listening ? 'Aria is listening… speak your answer' : 'Type your answer, or use the microphone to speak to Aria…'}/><button className="primary-button" type="submit" disabled={loading || !answer.trim()}><Send size={16}/> Send answer</button></form><p className="mic-privacy-note">Aria transcribes your answer in this form. Check it, then send it when you’re ready.</p></>}
+      {completed ? <div className="interview-complete"><Trophy size={24}/><div><b>Round complete · {average}/10</b><p>XP and your practice score have been added to your profile.</p></div><button className="primary-button" onClick={reset}>Practice again</button></div> : <><form className="answer-form" onSubmit={submitAnswer}><button type="button" onClick={toggleMic} className={`mic-button ${recording || dictating ? 'listening' : ''}`} disabled={transcribing || loading} title={recording ? 'Stop recording and transcribe' : dictating ? 'Stop browser dictation' : 'Record an answer for Aria'} aria-label={recording ? 'Stop recording' : dictating ? 'Stop browser dictation' : 'Record your answer'}>{transcribing ? <Loader2 className="animate-spin" size={19}/> : recording || dictating ? <MicOff size={19}/> : <Mic size={19}/>}</button><textarea rows={2} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={recording ? 'Recording… press the microphone again when finished' : transcribing ? 'Aria is transcribing your answer…' : dictating ? 'Browser dictation is listening…' : 'Type your answer, or record it for Aria…'}/><button className="primary-button" type="submit" disabled={loading || transcribing || !answer.trim()}><Send size={16}/> Send answer</button></form><div className="mic-privacy-note">{recording ? 'Recording stays on while this button is active. Stop it to transcribe.' : 'Audio is sent to your backend for Groq transcription. Review the transcript before sending.'}{error && !transcribing && <button type="button" className="dictation-fallback" onClick={startBrowserDictation}>Try browser dictation</button>}</div></>}
     </section>}
   </div>;
 }

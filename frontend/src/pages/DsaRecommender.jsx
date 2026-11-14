@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, ExternalLink, CheckCircle2, Circle } from 'lucide-react';
+import { Sparkles, ExternalLink, CheckCircle2, Circle, Code2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { API, useAuth } from '../context/AuthContext';
 
 const TOPICS = ['Arrays', 'Strings', 'Linked List', 'Trees', 'Graphs', 'Dynamic Programming', 'Recursion', 'Binary Search', 'Stack/Queue', 'Heap', 'Greedy', 'Sliding Window'];
@@ -7,6 +8,7 @@ const COMPANIES = ['Daily mix', 'Google', 'Amazon', 'Microsoft', 'Meta', 'Apple'
 
 export default function DsaRecommender() {
   const { user, syncUser } = useAuth();
+  const navigate = useNavigate();
   const [selected, setSelected] = useState(['Graphs', 'Dynamic Programming']);
   const [company, setCompany] = useState('Daily mix');
   const [problems, setProblems] = useState([]);
@@ -40,6 +42,7 @@ export default function DsaRecommender() {
     try { const { data } = await API.post('/user/dsa/solve', prob); syncUser(data.user, data.levelInfo); }
     catch (err) { setSaveError(err.response?.data?.error || 'Could not save this problem as solved.'); }
   };
+  const practiceInArena = (prob) => navigate('/coding', { state: { practiceProblem: { title: prob.title, topic: prob.topic, difficulty: prob.difficulty, summary: prob.summary, description: prob.description } } });
 
   const filtered = problems.filter((p) => filter === 'All' || p.difficulty === filter);
 
@@ -104,6 +107,7 @@ export default function DsaRecommender() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${badgeColor}`}>{p.difficulty}</span>
+                    <button type="button" onClick={() => practiceInArena(p)} className="practice-compiler-button" title={`Generate a LeetCode-style compiler exercise for ${p.title}`}><Code2 size={15}/> Practice in compiler</button>
                     <a href={p.leetcodeUrl} target="_blank" rel="noreferrer" className="text-[#FF6B00]"><ExternalLink size={16} /></a>
                   </div>
                 </div>

@@ -9,6 +9,7 @@ const { auditResume, localResumeAnalysis } = require('../utils/resumeReview');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const generate = async (prompt, json = false) => {
   if (!process.env.GROQ_API_KEY) throw new Error('Groq is not configured. Add GROQ_API_KEY to backend/.env.');
@@ -48,6 +49,32 @@ router.post('/interview', auth, async (req, res) => {
     const { role = 'Software Development Engineer', round = 'Experience & projects', history = [], userAnswer } = req.body;
     const candidate = await User.findById(req.user.id).select('resumeText').catch(() => null);
     res.json({ ...localInterviewReply({ role, round, userAnswer, resumeText: candidate?.resumeText }), mode: 'local' });
+  }
+});
+
+router.post('/transcribe', auth, audioUpload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Record an answer before asking Aria to transcribe it.' });
+    if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'Audio transcription needs GROQ_API_KEY. Try browser dictation or type your answer.' });
+    if (!/^audio\/(webm|mp4|ogg|mpeg|wav|x-wav|flac)/i.test(req.file.mimetype)) return res.status(415).json({ error: 'Unsupported audio format. Use WebM, MP4, OGG, WAV, or FLAC audio.' });
+    const form = new FormData();
+    form.append('model', process.env.GROQ_TRANSCRIPTION_MODEL || 'whisper-large-v3-turbo');
+    form.append('language', req.body.language || 'en');
+    form.append('response_format', 'json');
+    form.append('temperature', '0');
+    form.append('prompt', 'Transcribe the candidate speaking in a job interview. Preserve technical terms, programming languages, company names, and numbers. Return only the spoken words.');
+    form.append('file', new Blob([req.file.buffer], { type: req.file.mimetype }), req.file.originalname || 'interview-answer.webm');
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST', headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` }, body: form
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error?.message || `Transcription request failed (${response.status}).`);
+    const transcript = String(payload.text || '').trim();
+    if (!transcript) return res.status(422).json({ error: 'Aria could not hear clear speech. Try again closer to the microphone or type your answer.' });
+    res.json({ transcript, mode: 'groq-transcription', model: process.env.GROQ_TRANSCRIPTION_MODEL || 'whisper-large-v3-turbo' });
+  } catch (err) {
+    console.error('Audio transcription failed:', err.message);
+    res.status(err.status || 502).json({ error: 'Aria could not transcribe this recording. Try browser dictation or type your answer.' });
   }
 });
 
@@ -123,7 +150,7 @@ router.post('/dsa-recommend', auth, async (req, res) => {
 router.post('/coding-challenge', auth, async (req, res) => {
   try {
     const { topic = 'Arrays', difficulty = 'Easy' } = req.body;
-    const challenge = parseJson(await generate(`Create one original interview coding challenge with the clarity and structure of LeetCode. Topic: ${topic}. Difficulty: ${difficulty}. Return JSON {"title":"short title","difficulty":"Easy|Medium|Hard","topic":"...","acceptance":"N/A","statement":"...","examples":["input → output with explanation"],"constraints":["..."],"hint":"...","expectedOutput":"the exact output of the starter code sample, no explanation","starterCode":"JavaScript function skeleton with a console.log call using sample input"}. Make the example runnable and ensure the starter's sample input result matches expectedOutput exactly. Do not include a solution.`, true));
+    const challenge = parseJson(await generate(`Create one original LeetCode-style interview coding challenge. Topic: ${topic}. Difficulty: ${difficulty}. Return valid JSON with fields: title (short), difficulty (Easy|Medium|Hard), topic, acceptance (N/A), statement, examples (array of input/output with explanation), constraints (array), hint, expectedOutput (exact output of the included sample harness, no explanation), and starterCode object with runnable JavaScript, Python, C++, and Java strings. Each starter must define a clearly named solution function/method with TODO body, include a small sample invocation, and print the result. Keep the same sample input and exact expected output in all four starter programs. Ensure imports, types, method signatures, and print formatting compile in the selected runtime. Do not include a solution.`, true));
     res.json(challenge);
   } catch (err) { respondError(res, err); }
 });
