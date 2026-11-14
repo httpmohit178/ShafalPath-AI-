@@ -26,7 +26,7 @@
 - 🎤 **Practice with Aria:** complete a five-question role-focused interview with spoken prompts, typed or microphone answers, feedback, and scores.
 - 🤖 **Ask Margdarshak:** get placement guidance for resume, interview, DSA, role preparation, and study planning.
 - 🧠 **Practice DSA:** select topics and company-style practice patterns, then launch a fresh LeetCode-style exercise in the Arena.
-- 💻 **Use the Arena compiler:** edit JavaScript, Python, C++, or Java function starters, run sample code through Piston, and inspect the output.
+- 💻 **Use the Arena compiler:** edit JavaScript, Python, C++, or Java function starters, run sample code through the Piston-compatible runner, and inspect the output.
 - 🏅 **Track progress:** earn XP, maintain streaks, complete daily/weekly challenges, unlock badges, customize your avatar, and view the leaderboard.
 - 🔎 **Find job boards:** open role/location searches on external job sites and company career pages.
 
@@ -40,7 +40,7 @@
 | Generative AI | Groq Chat Completions API; model configured with `GROQ_MODEL` |
 | Speech-to-text | Groq Audio Transcriptions API; model configured with `GROQ_TRANSCRIPTION_MODEL` |
 | Resume extraction | `pdf-parse` for selectable PDF text; image-only/scanned PDFs require OCR first |
-| Code execution | Piston external execution API for JavaScript, Python, C++, and Java |
+| Code execution | Piston-compatible OnlineCompiler API for JavaScript, Python, C++, and Java |
 
 ## 🏗️ Architecture
 
@@ -54,11 +54,11 @@ Express REST API
   Auth middleware | AI routes | User/progress routes
         |                 |                   |
         v                 v                   v
-   MongoDB/Mongoose      Groq API             Piston API
-                         chat + audio         code execution
+   MongoDB/Mongoose      Groq API             Code runner API
+                         chat + audio         Piston-compatible execution
 ```
 
-The browser handles page rendering, form state, speech capture, and Aria's spoken prompts. The backend validates the JWT, reads/writes the signed-in user's MongoDB document, extracts resume text, and calls Groq or Piston when needed. The Groq key belongs only in the backend environment; `VITE_` variables are delivered to the browser and must never contain secrets.
+The browser handles page rendering, form state, speech capture, and Aria's spoken prompts. The backend validates the JWT, reads/writes the signed-in user's MongoDB document, extracts resume text, and calls Groq or the code runner when needed. Provider keys belong only in the backend environment; `VITE_` variables are delivered to the browser and must never contain secrets.
 
 ## 🔄 Main user flow
 
@@ -87,7 +87,7 @@ Scanned/image-only PDFs have no selectable text and need OCR before upload. No a
 2. Hold/press the microphone button to record; press it again to stop.
 3. The authenticated `/api/ai/transcribe` route forwards the short audio recording to Groq's speech-to-text endpoint when `GROQ_API_KEY` is set.
 4. The transcript appears in the answer field. Review or edit it, then press **Send answer** to ask Aria for interview feedback.
-5. If audio transcription is unavailable, use **Try browser dictation** where supported or type the answer.
+5. If audio transcription is unavailable, the microphone switches to browser dictation when supported; you can review/edit the transcript and send it, or type the answer.
 
 Audio is sent to the backend and Groq for transcription; the app route keeps the upload in memory and does not save the recording in MongoDB. Aria's spoken prompts use browser speech synthesis. The optional camera is a local preview and is not uploaded by the interview flow. Microphone use requires a secure browser context (HTTPS or `localhost`) and permission.
 
@@ -96,7 +96,7 @@ Audio is sent to the backend and Groq for transcription; the app route keeps the
 1. Choose topics and company-style practice in DSA Recommender.
 2. Select **Practice in compiler** on a recommendation.
 3. The Arena asks Groq for a fresh practice challenge based on the recommendation's pattern and opens the editor with language-specific function boilerplate.
-4. Run the sample through Piston. The API compares the last non-empty output line to the expected sample output.
+4. Run the sample through the Piston-compatible compiler API. The backend keeps the runner key private and compares the last non-empty output line to the expected sample output.
 5. A passing sample can be submitted for progress credit. The Arena does not currently run hidden tests; use the external problem link for the exact referenced question.
 
 ## 🚀 Run locally
@@ -105,7 +105,8 @@ Audio is sent to the backend and Groq for transcription; the app route keeps the
 
 - Node.js and npm versions compatible with the Vite version in `frontend/package.json`.
 - A MongoDB instance (local or hosted).
-- A Groq API key for live generation and audio transcription. The app's local Aria/Margdarshak/resume fallbacks still work for their supported cases without text-generation access.
+- A Groq API key for live generation and audio transcription. Local Aria/Margdarshak/resume fallbacks still work for their supported cases without Groq.
+- A code-runner API key for remote Python, C++, and Java execution (JavaScript has a local fallback). The Arena backend is configured to use the Piston-compatible endpoint below.
 
 ### 1. Configure the backend
 
@@ -123,9 +124,15 @@ JWT_SECRET=replace-with-a-long-random-secret
 GROQ_API_KEY=your-private-groq-api-key
 GROQ_MODEL=llama-3.3-70b-versatile
 GROQ_TRANSCRIPTION_MODEL=whisper-large-v3-turbo
+CODE_RUNNER_URL=https://api.onlinecompiler.io/api/v2/piston/execute
+CODE_RUNNER_API_KEY=your-private-code-runner-api-key
 ```
 
+Create a private API key from [OnlineCompiler.io](https://api.onlinecompiler.io/compilers/api-keys/) and keep it in the backend environment only. The configured endpoint is Piston-compatible, so the Arena can keep sending standard language/version/files/stdin requests. For deployment, set both `CODE_RUNNER_URL` and `CODE_RUNNER_API_KEY` in the **backend service** environment, then restart/redeploy the backend. Check `/api/health` for `codeRunnerConfigured: true`. The runner key is never sent to the React app.
+
 Keep `.env` private. Do not commit API keys or put them in frontend variables. Change the MongoDB connection string for a hosted database. Use a unique, long JWT secret in each environment.
+
+For a deployed app, set `GROQ_API_KEY`, `GROQ_MODEL`, and `GROQ_TRANSCRIPTION_MODEL` in the **backend service's environment-variable settings** (not the frontend/static-host settings), then redeploy/restart the backend. The public health route's `aiConfigured` field only confirms that a key value exists; it cannot confirm that the key is valid or has provider quota. Without a backend key, Aria continues with local role-specific interview questions and browser speech recognition where the browser supports it.
 
 Start the backend:
 
@@ -177,7 +184,7 @@ All routes use the `/api` prefix. Unless marked public, the endpoint requires a 
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `GET` | `/health` | API, MongoDB, and Groq configuration status (public) |
+| `GET` | `/health` | API, MongoDB, Groq, and code-runner configuration status (public) |
 | `POST` | `/auth/register` | Create an account (public) |
 | `POST` | `/auth/login` | Sign in (public) |
 | `GET` | `/auth/me` | Load the signed-in profile |
@@ -189,7 +196,7 @@ All routes use the `/api` prefix. Unless marked public, the endpoint requires a 
 | `POST` | `/ai/match-jd` | Compare a saved resume with a job description |
 | `POST` | `/ai/dsa-recommend` | Recommend topic/company-style DSA questions |
 | `POST` | `/ai/coding-challenge` | Generate a LeetCode-style practice challenge and language starters |
-| `POST` | `/ai/run-code` | Execute code through Piston and compare the sample output |
+| `POST` | `/ai/run-code` | Execute code through the configured Piston-compatible runner and compare the sample output |
 | `POST` | `/user/roadmap/toggle` | Toggle a roadmap task and update XP |
 | `POST` | `/user/dsa/solve` | Record a solved question and award eligible XP |
 | `POST` | `/user/interview/complete` | Save an interview score and completion progress |
@@ -217,7 +224,7 @@ All routes use the `/api` prefix. Unless marked public, the endpoint requires a 
 - Some other AI-generated tools require Groq; errors should be surfaced when a local fallback is not available.
 - Browser dictation availability varies by browser and device. Groq transcription requires `GROQ_API_KEY` and a usable microphone recording.
 - PDFs are limited to 5 MB and need selectable text; OCR is not included.
-- The coding arena checks the visible sample only. It is not a hidden-test judge or a production sandbox owned by this app; code is sent to Piston.
+- The coding arena checks the visible sample only. It is not a hidden-test judge or a production sandbox owned by this app; code is sent to the configured remote runner.
 - DSA recommendations and AI-generated challenges should be reviewed for correctness. The external problem link remains the source for the exact referenced question.
 - Job-board links open third-party websites. SafalPath does not scrape listings or submit applications.
 - Resume scores are estimates, not employer ATS results; no generated resume can guarantee an interview or shortlist.
@@ -230,9 +237,11 @@ All routes use the `/api` prefix. Unless marked public, the endpoint requires a 
 | `/api/health` says database disconnected | Confirm MongoDB is running and `MONGO_URI` is correct/reachable. |
 | Groq generation fails | Confirm `GROQ_API_KEY`, model availability, network access from backend, and provider quota. |
 | Mic button does not open | Use HTTPS or `localhost`, allow microphone permission, select a working input device, and retry. |
-| Audio recorded but no transcript | Confirm `GROQ_API_KEY`; use **Try browser dictation** or type the answer. Check backend logs without printing secrets. |
+| Audio recorded but no transcript | Add `GROQ_API_KEY` to the deployed backend environment and restart it; the UI automatically switches to browser dictation if supported. Check backend logs without printing secrets. |
 | Resume PDF is empty | It may be scanned/image-only. OCR it first or paste selectable text. |
 | Sample not passing | Compare exact printed output, including brackets, punctuation, and spacing, with the displayed expected value. |
+| Python/C++/Java compiler reports not configured | Add `CODE_RUNNER_API_KEY` to the backend environment, redeploy, and check `/api/health` for `codeRunnerConfigured: true`. |
+| Compiler says backend unreachable | Set frontend `VITE_API_URL` to the deployed backend URL ending in `/api`, then restart/redeploy the frontend. |
 | Frontend calls the wrong API | Set `VITE_API_URL` in `frontend/.env.local`, then restart Vite. |
 
 ## 📁 Project structure

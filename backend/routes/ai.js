@@ -11,6 +11,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const codeRunnerUrl = process.env.CODE_RUNNER_URL || 'https://api.onlinecompiler.io/api/v2/piston/execute';
 const generate = async (prompt, json = false) => {
   if (!process.env.GROQ_API_KEY) throw new Error('Groq is not configured. Add GROQ_API_KEY to backend/.env.');
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -38,24 +39,47 @@ router.post('/chat', auth, async (req, res) => {
 
 router.post('/interview', auth, async (req, res) => {
   try {
-    const { role = 'Software Development Engineer', round = 'Technical DSA & Problem Solving', history = [], userAnswer } = req.body;
+    const { role = 'Software Development Engineer', round = 'Role skills & scenarios', userAnswer } = req.body;
+    const history = Array.isArray(req.body.history) ? req.body.history.slice(-12) : [];
     const candidate = await User.findById(req.user.id).select('resumeText skills targetRole');
     const resumeContext = (candidate?.resumeText || '').slice(0, 9000);
+    const askedQuestions = history.filter((message) => message?.sender === 'ai' && message?.questionNumber).map((message) => message.text).filter(Boolean);
+    const experienceRound = /experience|projects/i.test(round);
+    const roundGuidance = experienceRound
+      ? 'Focus on a real work, internship, volunteer, or personal project example. You may refer to a specific resume detail, but never assume a result that is not stated.'
+      : /behavioral/i.test(round)
+        ? 'Ask about a workplace behavior such as teamwork, communication, conflict, feedback, ownership, or prioritization. Do not ask the candidate to describe a project.'
+        : /situational/i.test(round)
+          ? `Give a realistic hypothetical situation specific to the ${role} job and ask what the candidate would do. Do not ask about a project.`
+          : /technical dsa|problem solving/i.test(round)
+            ? `Ask a role-relevant technical or job problem-solving question for ${role}. For software roles, focus on algorithms, debugging, or reasoning; for other roles, ask a realistic work problem. Do not ask about a project.`
+            : /system design|core cs/i.test(round)
+              ? `Ask a core systems/design question suited to ${role}; for non-software roles ask about designing a reliable work process. Do not ask about a past project.`
+              : `Ask about a specific skill, tool, method, or day-to-day task that is central to working as a ${role}. Do not ask about a project.`;
     const prompt = userAnswer
-      ? `You are Aria, a warm but rigorous interviewer for the ${role} role, interview focus ${round}. This may be a technical or non-technical role; ask realistic role-relevant questions and score fairly. Candidate resume context: ${resumeContext || 'No resume uploaded yet; use the selected role and conversation only.'} Candidate profile skills: ${(candidate?.skills || []).join(', ')}. Review conversation: ${JSON.stringify(history).slice(-6000)}. Latest answer: ${JSON.stringify(userAnswer)}. Return JSON with score (integer 1-10 based on relevance, clarity, evidence, and role fit), feedback (two specific sentences: one strength and one actionable improvement), and nextQuestion (one role-specific follow-up; use resume details when relevant). Do not invent candidate experience.`
-      : `You are Aria, an encouraging interviewer for the ${role} role, interview focus ${round}. Candidate resume context: ${resumeContext || 'No resume uploaded yet; begin with role-specific experience questions.'} Candidate skills: ${(candidate?.skills || []).join(', ')}. Ask a first question grounded in the resume if possible; otherwise ask a specific question appropriate for this role. Support non-technical careers too. Return JSON: {"nextQuestion":"...","score":null,"feedback":""}.`;
-    res.json({ ...localInterviewReply({ role, round, userAnswer, resumeText: candidate?.resumeText }), ...parseJson(await generate(prompt, true)), mode: 'groq' });
+      ? `You are Aria, a warm but rigorous interviewer. Interview for role: ${role}. Interview focus: ${round}. ${roundGuidance} Score the answer fairly for this role. Candidate resume context: ${experienceRound ? (resumeContext || 'No resume uploaded; do not assume experience.') : 'Do not use the resume to turn this into a project question.'} Candidate profile skills: ${(candidate?.skills || []).join(', ')}. Conversation so far: ${JSON.stringify(history).slice(-6000)}. Latest answer: ${JSON.stringify(userAnswer)}. Return JSON with score (integer 1-10 based on relevance, clarity, evidence, and role fit), feedback (two specific sentences: one evidence-based strength and one actionable improvement), and nextQuestion (one focused, new question for this role and interview focus). Do not invent candidate experience. Do not repeat these previously asked questions: ${JSON.stringify(askedQuestions)}.`
+      : `You are Aria, an encouraging but realistic interviewer. Interview for role: ${role}. Interview focus: ${round}. ${roundGuidance} Ask exactly one specific, open-ended first question appropriate to this role and focus. This may be any career, including non-technical work. ${experienceRound ? `Candidate resume context: ${resumeContext || 'No resume uploaded; ask for a real experience example without assuming one.'} Use a resume detail only if it clearly supports the question.` : 'Ignore resume project details for this question; ask about the selected role and focus instead.'} Candidate skills: ${(candidate?.skills || []).join(', ')}. Return JSON: {"nextQuestion":"...","score":null,"feedback":""}.`;
+    const local = localInterviewReply({ role, round, history, userAnswer, resumeText: candidate?.resumeText });
+    const generated = parseJson(await generate(prompt, true));
+    const score = userAnswer && Number.isFinite(Number(generated.score)) ? Math.max(1, Math.min(10, Math.round(Number(generated.score)))) : null;
+    const feedback = typeof generated.feedback === 'string' ? generated.feedback.slice(0, 1200) : '';
+    const generatedQuestion = typeof generated.nextQuestion === 'string' ? generated.nextQuestion.trim() : '';
+    const normalizedQuestion = generatedQuestion.toLowerCase().replace(String(role).toLowerCase(), ' ');
+    const projectQuestion = /\bprojects?\b|\bportfolio\b/i.test(normalizedQuestion) || /\bwhat (?:have you built|did you build)\b/i.test(normalizedQuestion);
+    const nextQuestion = generatedQuestion && (!projectQuestion || experienceRound) ? generatedQuestion.slice(0, 1200) : local.nextQuestion;
+    res.json({ ...local, ...generated, score, feedback, nextQuestion, mode: 'groq' });
   } catch (err) {
-    const { role = 'Software Development Engineer', round = 'Experience & projects', history = [], userAnswer } = req.body;
+    const { role = 'Software Development Engineer', round = 'Role skills & scenarios', userAnswer } = req.body;
+    const history = Array.isArray(req.body.history) ? req.body.history.slice(-12) : [];
     const candidate = await User.findById(req.user.id).select('resumeText').catch(() => null);
-    res.json({ ...localInterviewReply({ role, round, userAnswer, resumeText: candidate?.resumeText }), mode: 'local' });
+    res.json({ ...localInterviewReply({ role, round, history, userAnswer, resumeText: candidate?.resumeText }), mode: 'local' });
   }
 });
 
 router.post('/transcribe', auth, audioUpload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Record an answer before asking Aria to transcribe it.' });
-    if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'Audio transcription needs GROQ_API_KEY. Try browser dictation or type your answer.' });
+    if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'Groq transcription is not configured on the backend. Add GROQ_API_KEY to the deployed backend environment and restart it, or use browser dictation below.' });
     if (!/^audio\/(webm|mp4|ogg|mpeg|wav|x-wav|flac)/i.test(req.file.mimetype)) return res.status(415).json({ error: 'Unsupported audio format. Use WebM, MP4, OGG, WAV, or FLAC audio.' });
     const form = new FormData();
     form.append('model', process.env.GROQ_TRANSCRIPTION_MODEL || 'whisper-large-v3-turbo');
@@ -160,10 +184,12 @@ router.post('/run-code', auth, async (req, res) => {
     const { language, code, stdin = '', problemTitle = 'Custom Sandbox', expectedOutput } = req.body;
     const runtimes = { javascript: ['javascript', '18.15.0'], python: ['python', '3.10.0'], cpp: ['c++', '10.2.0'], java: ['java', '15.0.2'] };
     if (!runtimes[language]) return res.status(400).json({ error: 'Choose a supported language.' });
+    if (typeof code !== 'string' || !code.trim()) return res.status(400).json({ error: 'Enter some code before running the program.' });
+    if (!process.env.CODE_RUNNER_API_KEY) return res.status(503).json({ error: 'The remote compiler is not configured. Add CODE_RUNNER_API_KEY to the backend environment and restart the backend.' });
     const [runtime, version] = runtimes[language];
-    const execRes = await fetch('https://emkc.org/api/v2/piston/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: runtime, version, files: [{ content: code }], stdin }) });
-    if (!execRes.ok) throw new Error(`Code runner returned ${execRes.status}. Try again shortly.`);
-    const execData = await execRes.json();
+    const execRes = await fetch(codeRunnerUrl, { method: 'POST', headers: { Authorization: process.env.CODE_RUNNER_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ language: runtime, version, files: [{ content: code }], stdin }) });
+    const execData = await execRes.json().catch(() => ({}));
+    if (!execRes.ok) return res.status(execRes.status === 401 || execRes.status === 403 ? 503 : 502).json({ error: execData.message || execData.error || `Code runner returned ${execRes.status}. Check CODE_RUNNER_API_KEY and runner status.` });
     let aiReview = 'Local code execution is ready. Add GROQ_API_KEY to backend/.env for AI complexity coaching.';
     if (process.env.GROQ_API_KEY) {
       try { aiReview = await generate(`Review this ${language} solution for ${problemTitle}:\n${code}\nGive time complexity, space complexity, and one useful improvement.`); }

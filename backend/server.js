@@ -23,6 +23,7 @@ app.get('/api/health', (_req, res) => res.json({
   status: 'ok',
   database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
   aiConfigured: Boolean(process.env.GROQ_API_KEY),
+  codeRunnerConfigured: Boolean(process.env.CODE_RUNNER_API_KEY),
   provider: 'groq',
   model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
 }));
