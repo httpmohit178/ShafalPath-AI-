@@ -5,10 +5,24 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   targetRole: { type: String, default: 'SDE' },
+  avatar: { type: String, default: '🌱' },
   resumeText: { type: String, default: '' },
+  resumeRewrite: { type: String, default: '' },
+  resumeDraft: {
+    fullName: { type: String, default: '' },
+    email: { type: String, default: '' },
+    location: { type: String, default: '' },
+    title: { type: String, default: '' },
+    summary: { type: String, default: '' },
+    skills: { type: String, default: '' },
+    experience: { type: String, default: '' },
+    projects: { type: String, default: '' },
+    education: { type: String, default: '' }
+  },
   atsScore: { type: Number, default: 0 },
   skills: [{ type: String }],
   missingSkills: [{ type: String }],
+  jobMatches: [{ company: String, score: Number, date: String }],
   xp: { type: Number, default: 40 },
   streak: {
     current: { type: Number, default: 1 },
@@ -40,6 +54,12 @@ const userSchema = new mongoose.Schema({
     interviewDone: { type: Boolean, default: false },
     codingDone: { type: Boolean, default: false }
   },
+  weeklyChallenges: {
+    weekKey: { type: String, default: '' },
+    completed: [{ type: String }]
+  },
+  lastSpinDate: { type: String, default: '' },
+  lastSpinReward: { type: Number, default: 0 },
   activityLog: [{
     date: String,
     title: String,

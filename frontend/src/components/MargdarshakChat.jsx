@@ -42,7 +42,7 @@ export default function MargdarshakChat() {
               <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center"><Compass size={20} /></div>
               <div>
                 <h4 className="font-bold text-sm">Margdarshak AI</h4>
-                <p className="text-xs text-orange-100">● Your placement guide · online</p>
+                <p className="text-xs text-orange-100">● Your placement guide · {user?.demoMode ? 'interactive preview' : 'online'}</p>
               </div>
             </div>
             <button onClick={() => setOpen(false)} className="p-1 hover:bg-white/20 rounded-lg"><X size={18} /></button>

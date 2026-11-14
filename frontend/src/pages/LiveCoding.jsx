@@ -1,181 +1,34 @@
 import { useState } from 'react';
-import { Play, Sparkles, Terminal, RotateCcw, CheckCircle2 } from 'lucide-react';
-import { API } from '../context/AuthContext';
+import { CheckCircle2, ChevronDown, Code2, Lightbulb, Play, RotateCcw, Sparkles, Terminal } from 'lucide-react';
+import { API, useAuth } from '../context/AuthContext';
 
-const STARTER_CODE = {
-  javascript: `// Two Sum - Optimal O(n) HashMap Solution
-function twoSum(nums, target) {
-  const map = new Map();
-  for (let i = 0; i < nums.length; i++) {
-    const diff = target - nums[i];
-    if (map.has(diff)) return [map.get(diff), i];
-    map.set(nums[i], i);
-  }
-  return [];
-}
-
-console.log("Indices:", JSON.stringify(twoSum([2, 7, 11, 15], 9)));`,
-  python: `# Two Sum - Optimal O(n) Dictionary Solution
-def two_sum(nums, target):
-    seen = {}
-    for i, num in enumerate(nums):
-        if target - num in seen:
-            return [seen[target - num], i]
-        seen[num] = i
-    return []
-
-print("Indices:", two_sum([2, 7, 11, 15], 9))`,
-  cpp: `#include <iostream>
-#include <vector>
-#include <unordered_map>
-using namespace std;
-
-int main() {
-    vector<int> nums = {2, 7, 11, 15};
-    int target = 9;
-    unordered_map<int, int> mp;
-    for (int i = 0; i < nums.size(); i++) {
-        if (mp.count(target - nums[i])) {
-            cout << "Indices: [" << mp[target - nums[i]] << ", " << i << "]" << endl;
-            return 0;
-        }
-        mp[nums[i]] = i;
-    }
-    return 0;
-}`,
-  java: `import java.util.*;
-
-public class Main {
-    public static void main(String[] args) {
-        int[] nums = {2, 7, 11, 15};
-        int target = 9;
-        Map<Integer, Integer> map = new HashMap<>();
-        for (int i = 0; i < nums.length; i++) {
-            if (map.containsKey(target - nums[i])) {
-                System.out.println("Indices: [" + map.get(target - nums[i]) + ", " + i + "]");
-                return;
-            }
-            map.put(nums[i], i);
-        }
-    }
-}`,
-};
+const problems = [
+  { id: 'two-sum', title: '1. Two Sum', difficulty: 'Easy', topic: 'Array · Hash Map', acceptance: '55.8%', expectedOutput: '[0,1]', statement: 'Given an array of integers nums and an integer target, return the indices of the two numbers that add up to target. You may assume each input has exactly one solution, and you may not use the same element twice.', examples: ['nums = [2,7,11,15], target = 9 → [0,1]', 'nums = [3,2,4], target = 6 → [1,2]'], constraints: ['2 ≤ nums.length ≤ 10⁴', 'Each input has exactly one solution.', 'Aim for O(n) time.'], hint: 'Store seen values in a hash map so you can find each matching complement in one pass.', starter: `// Return the indices of two values that add up to target.\nfunction twoSum(nums, target) {\n  // Your solution here\n}\n\nconsole.log(JSON.stringify(twoSum([2, 7, 11, 15], 9)));` },
+  { id: 'valid-parentheses', title: '20. Valid Parentheses', difficulty: 'Easy', topic: 'String · Stack', acceptance: '41.6%', expectedOutput: 'true', statement: 'Given a string s containing only brackets, determine whether the brackets are valid. Every opening bracket must close in the correct order.', examples: ['s = "()[]{}" → true', 's = "([)]" → false'], constraints: ['1 ≤ s.length ≤ 10⁴', 's contains only ()[]{} brackets.'], hint: 'Use a stack to match each closing bracket with the most recent unmatched opening bracket.', starter: `// Return true when all brackets are valid and correctly nested.\nfunction isValid(s) {\n  // Your solution here\n}\n\nconsole.log(isValid("()[]{}"));` },
+  { id: 'best-time-stock', title: '121. Best Time to Buy and Sell Stock', difficulty: 'Easy', topic: 'Array · Greedy', acceptance: '54.2%', expectedOutput: '5', statement: 'Choose one day to buy a stock and a different future day to sell it. Return the maximum profit, or 0 if no profit is possible.', examples: ['prices = [7,1,5,3,6,4] → 5', 'prices = [7,6,4,3,1] → 0'], constraints: ['1 ≤ prices.length ≤ 10⁵', '0 ≤ prices[i] ≤ 10⁴'], hint: 'Keep the minimum price seen as you scan and calculate the best profit for each day.', starter: `// Return the best profit from one buy followed by one sell.\nfunction maxProfit(prices) {\n  // Your solution here\n}\n\nconsole.log(maxProfit([7, 1, 5, 3, 6, 4]));` },
+];
+const starts = { javascript: problems[0].starter, python: 'def solve():\n    # Read input and return your solution\n    pass\n\nprint("Implement your solution")', cpp: '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    // Write your solution here\n    return 0;\n}', java: 'import java.util.*;\n\nclass Main {\n    public static void main(String[] args) {\n        // Write your solution here\n    }\n}' };
 
 export default function LiveCoding() {
-  const [language, setLanguage] = useState('javascript');
-  const [code, setCode] = useState(STARTER_CODE.javascript);
-  const [stdin, setStdin] = useState('');
-  const [output, setOutput] = useState('');
-  const [error, setError] = useState('');
-  const [aiReview, setAiReview] = useState('');
-  const [running, setRunning] = useState(false);
-
-  const handleLanguageChange = (lang) => {
-    setLanguage(lang);
-    setCode(STARTER_CODE[lang]);
-    setOutput('');
-    setError('');
-    setAiReview('');
-  };
-
+  const { syncUser } = useAuth(); const [problem, setProblem] = useState(problems[0]); const [language, setLanguage] = useState('javascript'); const [generating, setGenerating] = useState(false); const [problemError, setProblemError] = useState('');
+  const [code, setCode] = useState(starts.javascript); const [stdin, setStdin] = useState(''); const [output, setOutput] = useState('');
+  const [error, setError] = useState(''); const [aiReview, setAiReview] = useState(''); const [running, setRunning] = useState(false); const [ran, setRan] = useState(false); const [passedTest, setPassedTest] = useState(false);
+  const chooseProblem = (item) => { setProblem(item); if (language === 'javascript') setCode(item.starter); setOutput(''); setError(''); setAiReview(''); setRan(false); setPassedTest(false); };
+  const generateChallenge = async () => { setGenerating(true); setProblemError(''); try { const { data } = await API.post('/ai/coding-challenge', { topic: 'Arrays and problem solving', difficulty: 'Easy' }); const generated = { ...data, id: `ai-${Date.now()}`, acceptance: 'New', topic: data.topic || 'Problem solving', examples: data.examples || [], constraints: data.constraints || [], hint: data.hint || 'Try a small example by hand before coding.', expectedOutput: data.expectedOutput || '', starter: data.starterCode || problems[0].starter }; setProblem(generated); setLanguage('javascript'); setCode(generated.starter); setOutput(''); setError(''); setAiReview(''); setRan(false); setPassedTest(false); } catch (err) { setProblemError(err.response?.data?.error || 'Could not generate a challenge. Try a curated problem below.'); } finally { setGenerating(false); } };
+  const chooseLanguage = (lang) => { setLanguage(lang); setCode(lang === 'javascript' ? problem.starter : starts[lang]); setOutput(''); setError(''); setAiReview(''); setRan(false); };
   const runCode = async () => {
-    setRunning(true);
-    setOutput('');
-    setError('');
-    try {
-      const { data } = await API.post('/ai/run-code', { language, code, stdin, problemTitle: 'Two Sum' });
-      setOutput(data.stdout || '(Program exited with no console output)');
-      setError(data.stderr || '');
-      setAiReview(data.aiReview || '');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setRunning(false);
-    }
+    setRunning(true); setOutput(''); setError(''); setRan(false); setPassedTest(false);
+    try { const { data } = await API.post('/ai/run-code', { language, code, stdin, problemTitle: problem.title, expectedOutput: problem.expectedOutput }); setOutput(data.stdout || (data.exitCode === 0 ? '(Program ran with no output)' : '')); setError(data.stderr || ''); setAiReview(data.aiReview || ''); setRan(data.exitCode === 0 && !data.stderr); setPassedTest(Boolean(data.passedTest)); }
+    catch (err) { setError(err.response?.data?.error || 'Could not reach the code runner.'); }
+    finally { setRunning(false); }
   };
-
-  return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Live DSA Compiler & AI Code Coach</h1>
-          <p className="text-sm opacity-70">Compile & run real code in 4 languages with instant Big-O complexity feedback</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <select
-            value={language}
-            onChange={(e) => handleLanguageChange(e.target.value)}
-            className="px-4 py-2 rounded-xl border theme-card font-medium text-sm"
-          >
-            <option value="javascript">JavaScript (Node 18)</option>
-            <option value="python">Python 3.10</option>
-            <option value="cpp">C++ 17 (GCC)</option>
-            <option value="java">Java 15</option>
-          </select>
-          <button
-            onClick={() => setCode(STARTER_CODE[language])}
-            className="p-2.5 rounded-xl border theme-card hover:opacity-80"
-            title="Reset Starter Code"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={runCode}
-            disabled={running}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold shadow-md transition disabled:opacity-50"
-          >
-            <Play className="w-4 h-4" />
-            {running ? 'Compiling...' : 'Run Code'}
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 rounded-2xl border theme-card overflow-hidden shadow-sm">
-          <div className="px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs font-mono opacity-75">
-            <span>solution.{language === 'python' ? 'py' : language === 'cpp' ? 'cpp' : language === 'java' ? 'java' : 'js'}</span>
-            <span>UTF-8 • Auto-Indent</span>
-          </div>
-          <textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            spellCheck={false}
-            className="w-full h-[420px] p-4 font-mono text-sm bg-zinc-950 text-emerald-400 focus:outline-none resize-none leading-relaxed"
-          />
-        </div>
-
-        <div className="space-y-4">
-          <div className="rounded-2xl border theme-card p-4 space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider opacity-70">Custom Input (stdin)</label>
-            <textarea
-              value={stdin}
-              onChange={(e) => setStdin(e.target.value)}
-              placeholder="Enter custom test input..."
-              className="w-full h-20 p-3 rounded-xl border theme-card font-mono text-xs focus:outline-none"
-            />
-          </div>
-
-          <div className="rounded-2xl border theme-card p-4 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-70">
-              <Terminal className="w-4 h-4 text-orange-500" />
-              <span>Console Output</span>
-            </div>
-            <pre className="p-3 rounded-xl bg-zinc-950 text-zinc-100 font-mono text-xs min-h-[110px] whitespace-pre-wrap overflow-x-auto">
-              {error ? <span className="text-red-400">{error}</span> : output || 'Click "Run Code" to see live output...'}
-            </pre>
-          </div>
-
-          {aiReview && (
-            <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4 space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-orange-500">
-                <Sparkles className="w-4 h-4" />
-                <span>AI Complexity & Code Review</span>
-              </div>
-              <p className="text-xs leading-relaxed whitespace-pre-line">{aiReview}</p>
-            </div>
-          )}
-        </div>
-      </div>
+  const markComplete = async () => { try { const { data } = await API.post('/user/coding/complete', { title: problem.title, passedTest }); syncUser(data.user, data.levelInfo); } catch (err) { setError(err.response?.data?.error || 'The solution ran, but progress could not be saved.'); } };
+  return <div className="coding-page space-y-5">
+    <div className="coding-heading"><div><span className="eyebrow"><Code2 size={14}/> SAFALPATH ARENA</span><h1 className="page-title">Solve it. Run it. Learn from it.</h1><p className="page-subtitle">Interview style problems with a built in compiler and AI code coach.</p></div><div className="coding-stats"><span>⚡ Daily streak</span><b>+40 XP</b></div></div>
+    <div className="problem-picker theme-card"><label>CHALLENGE<select value={problem.id} onChange={(e) => chooseProblem(problems.find((p) => p.id === e.target.value))}>{problem.id.startsWith('ai-') && <option value={problem.id}>{problem.title}</option>}{problems.map((p) => <option value={p.id} key={p.id}>{p.title}</option>)}</select><ChevronDown size={15}/></label><div className="problem-meta"><span className="easy-pill">{problem.difficulty}</span><span>{problem.topic}</span>{problem.acceptance && <span>Acceptance {problem.acceptance}</span>}</div><button className="generate-button" disabled={generating} onClick={generateChallenge}><Sparkles size={14}/>{generating ? 'Creating…' : 'Generate a challenge'}</button></div>
+    {problemError && <div className="inline-error">{problemError}</div>}
+    <div className="coding-workspace"><section className="problem-panel theme-card"><div className="panel-title"><h2>{problem.title}</h2><span>DESCRIPTION</span></div><p>{problem.statement}</p><h3>Examples</h3>{problem.examples.map((example, i) => <pre className="example-case" key={i}><b>Example {i + 1}</b>{example}</pre>)}<h3>Constraints</h3><ul>{problem.constraints.map((item) => <li key={item}>{item}</li>)}</ul><aside><Lightbulb size={16}/><span><b>Hint</b> {problem.hint || 'Try a small example by hand before coding.'}</span></aside></section>
+      <section className="editor-panel theme-card"><div className="editor-toolbar"><label><select value={language} onChange={(e) => chooseLanguage(e.target.value)}><option value="javascript">JavaScript · Node 18</option><option value="python">Python 3</option><option value="cpp">C++ 17</option><option value="java">Java 15</option></select></label><button onClick={() => { setCode(language === 'javascript' ? problem.starter : starts[language]); setRan(false); setPassedTest(false); }}><RotateCcw size={14}/> Reset</button><button className="run-button" onClick={runCode} disabled={running}><Play size={15}/>{running ? 'Running…' : 'Run code'}</button></div><div className="code-file"><span>solution.{language === 'python' ? 'py' : language === 'cpp' ? 'cpp' : language === 'java' ? 'java' : 'js'}</span><span>{code.split('\n').length} lines · autosaved locally</span></div><textarea aria-label="Code editor" value={code} onChange={(e) => setCode(e.target.value)} spellCheck={false}/><div className="stdin-row"><label>Custom input <small>stdin · optional</small></label><input value={stdin} onChange={(e) => setStdin(e.target.value)} placeholder="Enter input for your program"/></div><div className="console-head"><span><Terminal size={15}/> Sample test · expected {problem.expectedOutput || 'generated sample'}</span>{ran && <span className={passedTest ? 'ran-pill' : 'fail-pill'}><CheckCircle2 size={14}/>{passedTest ? 'Sample passed' : 'Sample not passed'}</span>}</div><pre className={`console-output ${error || (ran && !passedTest) ? 'has-error' : ''}`}>{error || output || 'Run your code to see the output here.'}</pre>{passedTest && <button className="complete-button" onClick={markComplete}><CheckCircle2 size={16}/> Submit sample · complete challenge · +40 XP</button>}{aiReview && <div className="ai-review"><b><Sparkles size={15}/> AI code coach</b><p>{aiReview}</p></div>}</section>
     </div>
-  );
+  </div>;
 }

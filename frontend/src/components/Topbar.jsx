@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Sun, Moon, Flame, Sparkles } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export function ThemeToggle() {
   const [dark, setDark] = useState(() => localStorage.getItem('safalpath-theme') === 'dark');
@@ -34,15 +35,18 @@ export function ThemeToggle() {
 const PAGE_TITLES = {
   '/dashboard': 'Dashboard Overview',
   '/resume': 'ATS Resume Analyzer',
+  '/resume-builder': 'Job Ready Resume Builder',
+  '/jobs': 'Job Boards & Applications',
   '/jd-matcher': 'Job Description Matcher',
   '/dsa': 'DSA Problem Recommender',
-  '/compiler': 'Live Multi-Language Compiler',
+  '/coding': 'Live DSA Arena',
   '/interview': 'AI Mock Interviewer',
   '/roadmap': 'Placement Roadmap',
   '/rewards': 'XP & Badges',
 };
 
-export default function Topbar({ user }) {
+export default function Topbar() {
+  const { user } = useAuth();
   const location = useLocation();
   const title = PAGE_TITLES[location.pathname] || 'SafalPath Workspace';
 
@@ -58,10 +62,7 @@ export default function Topbar({ user }) {
 
       <div className="flex items-center gap-3">
         {user && (
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-500/10 text-orange-500 text-xs font-bold">
-            <Flame className="w-3.5 h-3.5" />
-            <span>{user.xp || 0} XP</span>
-          </div>
+          <><div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-500/10 text-orange-500 text-xs font-bold"><Flame className="w-3.5 h-3.5" /><span>{user.xp || 0} XP</span></div><Link to="/rewards" className="user-avatar-chip" title="Profile, avatar, and rewards"><span>{user.avatar || '🌱'}</span><small>{user.name?.split(' ')[0] || 'Profile'}</small></Link></>
         )}
         <ThemeToggle />
       </div>

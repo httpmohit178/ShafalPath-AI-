@@ -6,9 +6,15 @@ const auth = require('../middleware/auth');
 
 const router = express.Router();
 const signToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+const hasJwtSecret = (res) => {
+  if (process.env.JWT_SECRET) return true;
+  res.status(503).json({ error: 'JWT_SECRET is missing. Add it to backend/.env before creating or signing into accounts.' });
+  return false;
+};
 
 router.post('/register', async (req, res) => {
   try {
+    if (!hasJwtSecret(res)) return;
     const { name, email, password, targetRole } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required' });
@@ -34,6 +40,7 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
+    if (!hasJwtSecret(res)) return;
     const { email, password } = req.body;
     const user = await User.findOne({ email });
     if (!user || !(await bcrypt.compare(password, user.password))) {

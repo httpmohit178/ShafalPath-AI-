@@ -1,88 +1,31 @@
 import { useEffect, useState } from 'react';
-import { Award, CheckCircle2, Circle, Crown } from 'lucide-react';
+import { Award, CheckCircle2, Circle, Crown, Flame, Gift, Sparkles, Trophy } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { API, useAuth } from '../context/AuthContext';
 
-const ALL_BADGES = [
-  { name: 'Resume Ready', desc: 'Analyze your resume' },
-  { name: 'ATS Ace', desc: 'Reach ATS score 80+' },
-  { name: 'Job Hunter', desc: 'Match 3 job descriptions' },
-  { name: 'Planner', desc: 'Complete 10 roadmap tasks' },
-  { name: 'First Interview', desc: 'Finish a mock interview' },
-  { name: 'Smooth Talker', desc: 'Score 80+ in an interview' },
-  { name: 'DSA Grinder', desc: 'Solve 10 DSA problems' },
-  { name: 'All Green', desc: 'Pass all tests in live coding' },
-];
+const BADGES = [{ name: 'First Step', desc: 'Join SafalPath' }, { name: 'Resume Ready', desc: 'Analyze your resume' }, { name: 'ATS Ace', desc: 'Reach ATS score 80+' }, { name: 'Job Hunter', desc: 'Match three roles' }, { name: 'Planner', desc: 'Complete 10 roadmap tasks' }, { name: 'First Interview', desc: 'Finish a mock interview' }, { name: 'Smooth Talker', desc: 'Score 80+ in an interview' }, { name: 'DSA Grinder', desc: 'Solve 10 DSA problems' }, { name: 'Hard Hitter', desc: 'Solve three hard problems' }, { name: 'All Green', desc: 'Pass a sample coding test' }, { name: 'Lucky Spinner', desc: 'Spin the daily XP wheel' }];
+const WEEKLY = [{ id: 'resume-refresh', title: 'Refresh your resume', detail: 'Review a gap and strengthen one resume bullet.', to: '/resume' }, { id: 'aria-round', title: 'Practice with Aria', detail: 'Finish a five-question mock interview.', to: '/interview' }, { id: 'arena-problem', title: 'Solve a coding challenge', detail: 'Pass a sample in the SafalPath Arena.', to: '/coding' }];
+const DAILY = [{ key: 'dsaDone', title: 'Solve a DSA problem', xp: '+15 XP', to: '/dsa' }, { key: 'interviewDone', title: 'Practice an interview', xp: '+40 XP', to: '/interview' }, { key: 'codingDone', title: 'Pass a coding sample', xp: '+40 XP', to: '/coding' }];
+const PRIZES = [10, 15, 20, 25, 30, 40, 50, 75];
+const AVATARS = ['🌱', '🚀', '🦊', '🐼', '🦉', '🐯', '🐸', '🦋', '🐙', '🦄'];
+const today = () => new Date().toISOString().slice(0, 10);
 
 export default function Rewards() {
-  const { user, levelInfo } = useAuth();
-  const [leaderboard, setLeaderboard] = useState([]);
-
-  useEffect(() => {
-    API.get('/user/leaderboard').then((res) => setLeaderboard(res.data));
-  }, []);
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Rewards & Achievements</h1>
-        <p className="text-sm text-gray-500">Earn XP, level up, unlock badges and climb the leaderboard.</p>
-      </div>
-
-      <div className="bg-gradient-to-r from-[#1A1612] via-[#3A2818] to-[#1A1612] text-white p-8 rounded-3xl">
-        <p className="text-xs tracking-widest text-amber-300 font-bold">LEVEL {levelInfo.level}</p>
-        <h2 className="text-3xl font-extrabold mt-1">{levelInfo.title}</h2>
-        <p className="text-xs text-gray-300 mt-1">{user?.xp || 40} XP · {levelInfo.xpToNext} XP to level {levelInfo.level + 1}</p>
-        <div className="w-full max-w-md h-2 bg-white/20 rounded-full mt-4 overflow-hidden">
-          <div className="h-full bg-[#FF6B00]" style={{ width: `${levelInfo.progressPercent}%` }} />
-        </div>
-        <div className="flex gap-4 text-xs mt-4">
-          <span>🔥 {user?.streak?.current || 1} day streak</span>
-          <span>🏅 {user?.badges?.length || 1}/12 badges</span>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-3xl border border-gray-100">
-        <h3 className="font-bold text-sm mb-4">Badges</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {ALL_BADGES.map((b) => {
-            const unlocked = user?.badges?.includes(b.name);
-            return (
-              <div key={b.name} className={`p-4 rounded-2xl border text-center ${unlocked ? 'border-orange-300 bg-orange-50/40' : 'border-gray-100 opacity-60'}`}>
-                <Award className={`mx-auto mb-2 ${unlocked ? 'text-[#FF6B00]' : 'text-gray-400'}`} size={26} />
-                <h4 className="font-bold text-xs">{b.name}</h4>
-                <p className="text-[11px] text-gray-500 mt-1">{b.desc}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-3xl border border-orange-100 space-y-3">
-        <h3 className="font-bold text-sm">Daily quests</h3>
-        {[
-          { label: 'Solve a DSA problem', xp: '+15', done: user?.dailyQuests?.dsaDone },
-          { label: 'Take a mock interview', xp: '+40', done: user?.dailyQuests?.interviewDone },
-          { label: 'Submit a live coding solution', xp: '+40', done: user?.dailyQuests?.codingDone },
-        ].map((q) => (
-          <div key={q.label} className={`flex justify-between items-center p-3 rounded-xl ${q.done ? 'bg-[#FAF8F5] text-gray-400 line-through' : ''}`}>
-            <div className="flex items-center gap-3 text-sm font-medium">
-              {q.done ? <CheckCircle2 className="text-emerald-600" size={18} /> : <Circle className="text-gray-400" size={18} />}
-              {q.label}
-            </div>
-            <span className="text-xs font-bold text-[#FF6B00]">{q.xp}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white p-6 rounded-3xl border border-gray-100 space-y-2">
-        <h3 className="font-bold text-sm flex items-center gap-2 mb-3"><Crown size={16} className="text-[#FF6B00]" /> Leaderboard</h3>
-        {leaderboard.map((u, idx) => (
-          <div key={u._id} className={`flex justify-between items-center p-3 rounded-xl text-sm ${u._id === user?._id ? 'bg-orange-50 font-bold' : ''}`}>
-            <span>#{idx + 1} {u.name} {u._id === user?._id && '(you)'}</span>
-            <span className="text-xs font-semibold">🔥 {u.streak?.current || 1} &nbsp; {u.xp} XP</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const { user, levelInfo, syncUser } = useAuth(); const [leaderboard, setLeaderboard] = useState([]); const [error, setError] = useState('');
+  const [spinning, setSpinning] = useState(false); const [rotation, setRotation] = useState(0); const [spinResult, setSpinResult] = useState(null); const [avatarSaving, setAvatarSaving] = useState(false);
+  useEffect(() => { API.get('/user/leaderboard').then((res) => setLeaderboard(res.data)).catch(() => setLeaderboard(user ? [{ ...user, _id: user._id || 'local-user' }] : [])); }, [user]);
+  const spin = async () => { if (spinning || user?.lastSpinDate === today()) return; setSpinning(true); setError(''); try { const { data } = await API.post('/user/rewards/spin'); const index = Math.max(0, PRIZES.indexOf(data.reward)); const alignment = ((360 - ((rotation + index * 45) % 360)) % 360); setRotation(rotation + 360 * 5 + alignment); await new Promise((resolve) => setTimeout(resolve, 3000)); syncUser(data.user, data.levelInfo); setSpinResult(data.reward); } catch (err) { setError(err.response?.data?.error || 'Could not spin for today’s reward.'); } finally { setSpinning(false); } };
+  const chooseAvatar = async (avatar) => { setAvatarSaving(true); setError(''); try { const { data } = await API.put('/user/profile/avatar', { avatar }); syncUser(data.user, data.levelInfo); } catch (err) { setError(err.response?.data?.error || 'Could not save your avatar.'); } finally { setAvatarSaving(false); } };
+  const daily = user?.dailyQuests?.date === today() ? user.dailyQuests : {}; const weekly = user?.weeklyChallenges?.completed || []; const alreadySpun = user?.lastSpinDate === today();
+  return <div className="rewards-page space-y-6">
+    <div><span className="eyebrow"><Trophy size={14}/> PROGRESS THAT ADDS UP</span><h1 className="page-title">Every small win counts.</h1><p className="page-subtitle">Earn XP from practice, collect badges, customize your avatar, and build toward Placement Ready.</p></div>
+    {error && <div className="inline-error">{error}</div>}
+    <section className="level-hero"><div className="level-hero-copy"><span>YOUR CURRENT LEVEL · {levelInfo.level}</span><h2>{levelInfo.title}</h2><p>{user?.xp || 0} XP · {levelInfo.xpToNext} XP to Level {levelInfo.level + 1}</p><div className="level-track"><i style={{ width: `${levelInfo.progressPercent}%` }}/></div><small>{Math.round(levelInfo.progressPercent)}% to the next level</small><div className="streak-row"><span><Flame size={16}/> {user?.streak?.current || 1} day streak</span><span><Award size={16}/> {user?.badges?.length || 0} badges</span></div></div><div className="level-orbit"><div>{user?.avatar || '🌱'}</div><span>{user?.name || 'YOUR'}<br/>JOURNEY</span></div></section>
+    <section className="theme-card quest-section"><div className="section-title"><div><span className="eyebrow"><Gift size={13}/> DAILY BONUS</span><h2>Spin for today’s XP</h2></div><span className="day-chip">{alreadySpun ? 'CLAIMED TODAY' : 'ONE SPIN TODAY'}</span></div><div className="spin-layout"><div className="spin-wheel-wrap"><div className={`spin-pointer ${spinning ? 'active' : ''}`}>▼</div><div className="spin-wheel" style={{ transform: `rotate(${rotation}deg)` }}>{PRIZES.map((prize, index) => <span key={prize} style={{ transform: `rotate(${index * 45}deg) translateY(-77px) rotate(${-index * 45}deg)` }}>{prize}</span>)}</div></div><div className="spin-copy"><b>{spinResult ? `You won ${spinResult} XP!` : alreadySpun ? `Today's spin: ${user?.lastSpinReward || 0} XP` : 'Your next reward is waiting.'}</b><p>Give the wheel a spin. Your reward is picked once per day and added to your XP.</p><button className="primary-button" disabled={spinning || alreadySpun} onClick={spin}>{spinning ? 'Spinning…' : alreadySpun ? 'Come back tomorrow' : 'Spin the wheel'}</button>{spinResult && <small><CheckCircle2 size={14}/> XP added to your account</small>}</div></div></section>
+    <section className="theme-card quest-section"><div className="section-title"><div><span className="eyebrow"><Sparkles size={13}/> YOUR DAILY MOMENTUM</span><h2>Today’s quick wins</h2></div><span className="day-chip">TODAY</span></div><div className="quest-list">{DAILY.map((quest) => <Link to={quest.to} key={quest.key} className={`quest-row ${daily[quest.key] ? 'done' : ''}`}><span className="quest-check">{daily[quest.key] ? <CheckCircle2 size={20}/> : <Circle size={20}/>}</span><span><b>{quest.title}</b><small>{daily[quest.key] ? 'Completed · nice work!' : 'A quick step toward your goal'}</small></span><strong>{daily[quest.key] ? 'DONE' : quest.xp}</strong></Link>)}</div></section>
+    <section className="theme-card quest-section"><div className="section-title"><div><span className="eyebrow"><Flame size={13}/> THIS WEEK</span><h2>Three steps to a stronger week</h2></div><span className="day-chip">{weekly.filter((id) => WEEKLY.some((w) => w.id === id)).length}/3 DONE</span></div><div className="weekly-grid">{WEEKLY.map((challenge, idx) => { const done = weekly.includes(challenge.id); return <article key={challenge.id} className={`weekly-card ${done ? 'done' : ''}`}><div className="weekly-number">0{idx + 1}</div><h3>{challenge.title}</h3><p>{challenge.detail}</p>{done ? <span className="weekly-done"><CheckCircle2 size={15}/> Complete · +60 XP</span> : <div className="weekly-actions"><Link to={challenge.to}>Go practice · +60 XP</Link></div>}</article>; })}</div></section>
+    <section className="theme-card quest-section avatar-picker"><div className="section-title"><div><span className="eyebrow"><Sparkles size={13}/> YOUR PROFILE</span><h2>Choose your avatar</h2></div><span className="current-avatar">{user?.avatar || '🌱'}</span></div><p>Pick a companion to represent you in your SafalPath journey.</p><div className="avatar-options">{AVATARS.map((avatar) => <button key={avatar} onClick={() => chooseAvatar(avatar)} disabled={avatarSaving} className={user?.avatar === avatar ? 'selected' : ''} aria-label={`Select ${avatar} avatar`}>{avatar}</button>)}</div></section>
+    <section className="theme-card quest-section"><div className="section-title"><div><span className="eyebrow"><Award size={13}/> MILESTONES</span><h2>Your badges</h2></div><span className="day-chip">{user?.badges?.length || 0} UNLOCKED</span></div><div className="badge-grid">{BADGES.map((badge) => { const unlocked = user?.badges?.includes(badge.name); return <article key={badge.name} className={unlocked ? 'unlocked' : ''}><div><Award size={22}/></div><b>{badge.name}</b><small>{badge.desc}</small></article>; })}</div></section>
+    <section className="theme-card quest-section leaderboard"><div className="section-title"><div><span className="eyebrow"><Crown size={13}/> COMMUNITY</span><h2>Leaderboard</h2></div></div>{leaderboard.map((person, idx) => <div key={person._id} className="leader-row"><span><i>{idx + 1}</i>{person.name}{person._id === user?._id && ' · you'}</span><strong>{person.xp} XP</strong></div>)}</section>
+  </div>;
 }

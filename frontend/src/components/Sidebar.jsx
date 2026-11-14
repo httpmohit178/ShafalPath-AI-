@@ -1,11 +1,14 @@
 import { NavLink } from 'react-router-dom';
-import { Home, LayoutDashboard, FileText, Target, Map, Mic, ListChecks, Code2, Trophy, Flame, Bell } from 'lucide-react';
+import { Home, LayoutDashboard, FileText, Target, Map, Mic, ListChecks, Code2, Trophy, Flame, Bell, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import BrandLogo from './BrandLogo';
 
 const links = [
   { name: 'Home', path: '/', icon: Home },
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { name: 'Resume Analyzer', path: '/resume', icon: FileText },
+  { name: 'Resume Builder', path: '/resume-builder', icon: FileText },
+  { name: 'Job Boards', path: '/jobs', icon: Briefcase },
   { name: 'JD Matcher', path: '/jd-matcher', icon: Target },
   { name: 'Roadmap', path: '/roadmap', icon: Map },
   { name: 'Mock Interview', path: '/interview', icon: Mic },
@@ -22,13 +25,7 @@ export default function Sidebar() {
   return (
     <aside className="w-64 min-h-screen bg-white border-r border-orange-100 flex flex-col justify-between p-4 shrink-0">
       <div>
-        <div className="flex items-center gap-3 px-2 mb-7">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#FF6B00] to-amber-400 flex items-center justify-center text-white font-bold shadow-sm">↗</div>
-          <div>
-            <h1 className="font-bold text-lg leading-none">Safal<span className="text-[#FF6B00]">Path</span></h1>
-            <p className="text-[10px] tracking-widest text-gray-400 font-semibold mt-1">CAREER COPILOT</p>
-          </div>
-        </div>
+        <div className="px-2 mb-7"><BrandLogo tagline /></div>
 
         <nav className="space-y-1">
           {links.map(({ name, path, icon: Icon }) => (

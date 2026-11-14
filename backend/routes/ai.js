@@ -1,123 +1,132 @@
 const express = require('express');
-const router = express.Router();
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
 const { GoogleGenAI } = require('@google/genai');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
+const { completeWeeklyChallenge } = require('../utils/weeklyChallenge');
 
-// Ensure GEMINI_API_KEY is set in Render -> Environment
+const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const getAI = () => {
   if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is missing in server environment variables');
+    const error = new Error('AI is not configured. Add GEMINI_API_KEY to backend/.env and restart the server.');
+    error.status = 503;
+    throw error;
   }
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 };
+const generate = async (prompt, json = false) => {
+  const result = await getAI().models.generateContent({ model, contents: prompt, ...(json ? { config: { responseMimeType: 'application/json' } } : {}) });
+  return result.text || '';
+};
+const parseJson = (text) => JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
+const respondError = (res, err) => {
+  console.error('AI request failed:', err.message);
+  res.status(err.status || 502).json({ error: err.message || 'AI request failed. Check your API key and model configuration.' });
+};
 
-// 1. Margdarshak AI Placement Chatbot
 router.post('/chat', auth, async (req, res) => {
   try {
-    const ai = getAI();
-    const { message } = req.body;
     const u = await User.findById(req.user.id);
-    const context = `Student: ${u?.name || 'Candidate'}, Target Role: ${u?.targetRole || 'SDE'}, XP: ${u?.xp || 0}`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `You are Margdarshak AI, a warm, practical Indian tech placement mentor.
-User Context: ${context}
-Answer clearly in 3-5 concise bullet points or short sentences.
-Student question: ${message}`,
-    });
-
-    res.json({ reply: response.text });
-  } catch (err) {
-    console.error('AI Chat Error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
+    const reply = await generate(`You are Margdarshak, a practical placement mentor. Student: ${u?.name || 'Candidate'}, target role: ${u?.targetRole || 'SDE'}, XP: ${u?.xp || 0}. Answer clearly and concisely. Question: ${req.body.message || ''}`);
+    res.json({ reply });
+  } catch (err) { respondError(res, err); }
 });
 
-// 2. AI Mock Interviewer (Generates Questions & Evaluates Answers)
 router.post('/interview', auth, async (req, res) => {
   try {
-    const ai = getAI();
-    const { role = 'Software Development Engineer', round = 'Technical DSA & Core CS', history = [], userAnswer } = req.body;
-
+    const { role = 'Software Development Engineer', round = 'Technical DSA & Problem Solving', history = [], userAnswer } = req.body;
+    const candidate = await User.findById(req.user.id).select('resumeText skills targetRole');
+    const resumeContext = (candidate?.resumeText || '').slice(0, 9000);
     const prompt = userAnswer
-      ? `You are a senior technical interviewer hiring for ${role} (${round}).
-Previous conversation: ${JSON.stringify(history)}
-Candidate's latest answer: "${userAnswer}"
-1. Score the answer out of 10.
-2. Give 2 sentences of constructive feedback (strength + improvement).
-3. Ask the next logical follow-up or new interview question.
-Respond strictly in JSON format: {"score": number, "feedback": "string", "nextQuestion": "string"}`
-      : `You are a senior technical interviewer hiring for ${role} (${round}).
-Greet the candidate briefly and ask the first realistic interview question.
-Respond strictly in JSON format: {"score": null, "feedback": "", "nextQuestion": "string"}`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' },
-    });
-
-    res.json(JSON.parse(response.text));
-  } catch (err) {
-    console.error('Mock Interview Error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
+      ? `You are Aria, a warm but rigorous interviewer for the ${role} role, interview focus ${round}. This may be a technical or non-technical role; ask realistic role-relevant questions and score fairly. Candidate resume context: ${resumeContext || 'No resume uploaded yet; use the selected role and conversation only.'} Candidate profile skills: ${(candidate?.skills || []).join(', ')}. Review conversation: ${JSON.stringify(history).slice(-6000)}. Latest answer: ${JSON.stringify(userAnswer)}. Return JSON with score (integer 1-10 based on relevance, clarity, evidence, and role fit), feedback (two specific sentences: one strength and one actionable improvement), and nextQuestion (one role-specific follow-up; use resume details when relevant). Do not invent candidate experience.`
+      : `You are Aria, an encouraging interviewer for the ${role} role, interview focus ${round}. Candidate resume context: ${resumeContext || 'No resume uploaded yet; begin with role-specific experience questions.'} Candidate skills: ${(candidate?.skills || []).join(', ')}. Ask a first question grounded in the resume if possible; otherwise ask a specific question appropriate for this role. Support non-technical careers too. Return JSON: {"nextQuestion":"...","score":null,"feedback":""}.`;
+    res.json(parseJson(await generate(prompt, true)));
+  } catch (err) { respondError(res, err); }
 });
 
-// 3. Live Code Compiler & AI Complexity Analyzer (Supports Python, C++, Java, JavaScript)
+router.post('/analyze-resume', auth, upload.single('resumePdf'), async (req, res) => {
+  try {
+    let resumeText = req.body.resumeText || '';
+    if (req.file) {
+      if (req.file.mimetype === 'application/pdf') resumeText = (await pdfParse(req.file.buffer)).text;
+      else resumeText = req.file.buffer.toString('utf8');
+    }
+    if (!resumeText.trim()) return res.status(400).json({ error: 'Upload a text-based PDF or paste your resume text first.' });
+    const targetRole = req.body.targetRole || 'Software Engineer';
+    const analysis = parseJson(await generate(`Review this resume for the ${targetRole} role. Return valid JSON fields: atsScore (integer 0-100), summary (2-3 sentences), skills (only skills found in the resume), missingSkills (important role skills absent), strengths (evidence from the resume), issues (objects {issue, whyItHurts, fix}; include grammar, unclear dates, weak bullets, missing links/metrics only if actually present), skillGaps (objects {skill, whyItMatters, nextStep}), experienceInsights (array), improvements (specific edits), suggestedProjects (array), correctedResume (complete ATS-friendly rewrite with sections Contact, Summary, Skills, Experience, Projects, Education; preserve all facts, never invent employers, education, dates, skills or metrics; use clear [Add ...] placeholders where evidence is missing). Keep the rewrite plain text and ready to paste into a document. Resume: ${resumeText.slice(0, 18000)}`, true));
+    const user = await User.findById(req.user.id);
+    user.resumeText = resumeText.slice(0, 20000); user.resumeRewrite = analysis.correctedResume || ''; user.targetRole = targetRole; user.atsScore = analysis.atsScore; user.skills = analysis.skills || []; user.missingSkills = analysis.missingSkills || [];
+    if (!user.badges.includes('Resume Ready')) user.badges.push('Resume Ready');
+    if (analysis.atsScore >= 80 && !user.badges.includes('ATS Ace')) user.badges.push('ATS Ace');
+    completeWeeklyChallenge(user, 'resume-refresh');
+    await user.save();
+    res.json({ analysis, user, levelInfo: user.getLevelInfo() });
+  } catch (err) { respondError(res, err); }
+});
+
+router.post('/roadmap', auth, async (req, res) => {
+  try {
+    const weeks = Math.min(12, Math.max(2, Number(req.body.weeks) || 6));
+    const hoursPerDay = Math.min(8, Math.max(1, Number(req.body.hoursPerDay) || 3));
+    const user = await User.findById(req.user.id);
+    const prompt = `Create a practical ${weeks}-week placement study plan for ${req.body.targetRole || user.targetRole}. Candidate skill gaps: ${(user.missingSkills || []).join(', ') || 'general interview readiness'}. ${hoursPerDay} hours/day. Return JSON {"plan":[...]} with exactly ${weeks} week objects: {"week":1,"title":"...","subtitle":"...","tasks":[{ "title":"...","type":"Study|Practice|Project","hours":"45 min","resource":"specific activity","completed":false }]} and 3-4 realistic tasks per week.`;
+    const { plan } = parseJson(await generate(prompt, true));
+    user.targetRole = req.body.targetRole || user.targetRole; user.roadmap = { weeks, hoursPerDay, plan };
+    await user.save(); res.json({ user, levelInfo: user.getLevelInfo() });
+  } catch (err) { respondError(res, err); }
+});
+
+router.post('/match-jd', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!req.body.jobDescription?.trim()) return res.status(400).json({ error: 'Paste a job description first.' });
+    if (!user?.resumeText) return res.status(400).json({ error: 'Analyze or add your resume before matching it to a role.' });
+    const result = parseJson(await generate(`Compare resume to this job description ${req.body.company || ''}. Return JSON {"matchPercent":0,"matchedSkills":[],"missingKeywords":[],"strengths":[],"recommendations":[]} with evidence-based comparison. Resume: ${(user.resumeText || '').slice(0, 12000)} Job: ${(req.body.jobDescription || '').slice(0, 12000)}`, true));
+    user.jobMatches.unshift({ company: req.body.company || 'Job description', score: result.matchPercent || 0, date: new Date().toISOString().slice(0, 10) });
+    if (user.jobMatches.length >= 3 && !user.badges.includes('Job Hunter')) user.badges.push('Job Hunter');
+    await user.save();
+    res.json({ ...result, user, levelInfo: user.getLevelInfo() });
+  } catch (err) { respondError(res, err); }
+});
+
+router.post('/dsa-recommend', auth, async (req, res) => {
+  try {
+    const topics = (req.body.topics || ['Arrays', 'Graphs']).slice(0, 6);
+    const company = req.body.company || 'General interview practice';
+    const text = await generate(`Recommend exactly 2 real LeetCode problems per topic for ${topics.join(', ')}. Target company interview style: ${company}. Use commonly reported interview patterns for this company, but do not claim the company authored or endorsed these questions. Return JSON {"problems":[{"title":"exact LeetCode title","topic":"...","company":"${company}","difficulty":"Easy|Medium|Hard","summary":"pattern and learning objective","description":"A concise problem statement with the goal and key constraint, without copying the full LeetCode prompt","leetcodeUrl":"direct problem URL"}]}.` , true);
+    res.json(parseJson(text).problems || []);
+  } catch (err) { respondError(res, err); }
+});
+
+router.post('/coding-challenge', auth, async (req, res) => {
+  try {
+    const { topic = 'Arrays', difficulty = 'Easy' } = req.body;
+    const challenge = parseJson(await generate(`Create one original interview coding challenge with the clarity and structure of LeetCode. Topic: ${topic}. Difficulty: ${difficulty}. Return JSON {"title":"short title","difficulty":"Easy|Medium|Hard","topic":"...","acceptance":"N/A","statement":"...","examples":["input → output with explanation"],"constraints":["..."],"hint":"...","expectedOutput":"the exact output of the starter code sample, no explanation","starterCode":"JavaScript function skeleton with a console.log call using sample input"}. Make the example runnable and ensure the starter's sample input result matches expectedOutput exactly. Do not include a solution.`, true));
+    res.json(challenge);
+  } catch (err) { respondError(res, err); }
+});
+
 router.post('/run-code', auth, async (req, res) => {
   try {
-    const ai = getAI();
-    const { language, code, stdin = '', problemTitle = 'Custom Sandbox' } = req.body;
-
-    // Fast path for JavaScript using Piston public execution engine, fallback to Gemini sandbox for C++/Java/Python/JS
-    const pistonRuntimes = {
-      javascript: { language: 'javascript', version: '18.15.0' },
-      python: { language: 'python', version: '3.10.0' },
-      cpp: { language: 'c++', version: '10.2.0' },
-      java: { language: 'java', version: '15.0.2' },
-    };
-
-    let executionOutput = '';
-    let executionError = '';
-
-    if (pistonRuntimes[language]) {
-      const execRes = await fetch('https://emkc.org/api/v2/piston/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language: pistonRuntimes[language].language,
-          version: pistonRuntimes[language].version,
-          files: [{ content: code }],
-          stdin,
-        }),
-      });
-      const execData = await execRes.json();
-      executionOutput = execData.run?.stdout || '';
-      executionError = execData.run?.stderr || '';
+    const { language, code, stdin = '', problemTitle = 'Custom Sandbox', expectedOutput } = req.body;
+    const runtimes = { javascript: ['javascript', '18.15.0'], python: ['python', '3.10.0'], cpp: ['c++', '10.2.0'], java: ['java', '15.0.2'] };
+    if (!runtimes[language]) return res.status(400).json({ error: 'Choose a supported language.' });
+    const [runtime, version] = runtimes[language];
+    const execRes = await fetch('https://emkc.org/api/v2/piston/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: runtime, version, files: [{ content: code }], stdin }) });
+    if (!execRes.ok) throw new Error(`Code runner returned ${execRes.status}. Try again shortly.`);
+    const execData = await execRes.json();
+    let aiReview = 'Add GEMINI_API_KEY to backend/.env to enable AI complexity coaching.';
+    if (process.env.GEMINI_API_KEY) {
+      try { aiReview = await generate(`Review this ${language} solution for ${problemTitle}:\n${code}\nGive time complexity, space complexity, and one useful improvement.`); }
+      catch (err) { aiReview = `Code ran successfully; AI review unavailable: ${err.message}`; }
     }
-
-    // AI Time/Space Complexity & Optimization Feedback
-    const reviewRes = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `Analyze this ${language} code for "${problemTitle}":
-\`\`\`${language}
-${code}
-\`\`\`
-Provide a 2-line Time & Space Complexity analysis and 1 optimization tip.`,
-    });
-
-    res.json({
-      stdout: executionOutput,
-      stderr: executionError,
-      aiReview: reviewRes.text,
-    });
-  } catch (err) {
-    console.error('Compiler Error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
+    const stdout = execData.run?.stdout || '';
+    const lastOutput = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1) || '';
+    res.json({ stdout, stderr: execData.run?.stderr || execData.compile?.stderr || '', exitCode: execData.run?.code ?? execData.compile?.code, passedTest: expectedOutput == null ? null : lastOutput === String(expectedOutput).trim(), aiReview });
+  } catch (err) { respondError(res, err); }
 });
 
 module.exports = router;

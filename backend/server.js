@@ -9,11 +9,22 @@ const userRoutes = require('./routes/user');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB Connected'))
-  .catch((err) => console.error('❌ MongoDB Error:', err));
+if (process.env.MONGO_URI) {
+  mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('✅ MongoDB Connected'))
+    .catch((err) => console.error('❌ MongoDB Error:', err.message));
+} else {
+  console.error('⚠️ MONGO_URI is missing. Configure backend/.env to enable accounts and persistent progress.');
+}
+
+app.get('/api/health', (_req, res) => res.json({
+  status: 'ok',
+  database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+  aiConfigured: Boolean(process.env.GEMINI_API_KEY),
+  model: process.env.GEMINI_MODEL || 'gemini-3.8-flash'
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);

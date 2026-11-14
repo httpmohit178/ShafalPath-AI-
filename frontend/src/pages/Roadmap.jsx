@@ -8,12 +8,16 @@ export default function Roadmap() {
   const [weeks, setWeeks] = useState(user?.roadmap?.weeks || 6);
   const [hoursPerDay, setHoursPerDay] = useState(user?.roadmap?.hoursPerDay || 3);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const generate = async () => {
     setLoading(true);
+    setError('');
     try {
       const { data } = await API.post('/ai/roadmap', { targetRole, weeks, hoursPerDay });
       syncUser(data.user, data.levelInfo);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not generate your roadmap. Check the API and AI configuration.');
     } finally {
       setLoading(false);
     }
@@ -34,6 +38,8 @@ export default function Roadmap() {
         <h1 className="text-2xl font-bold">Learning Roadmap</h1>
         <p className="text-sm text-gray-500">Your skill gaps converted into a week-wise study plan before interviews.</p>
       </div>
+
+      {error && <div className="inline-error">{error}</div>}
 
       <div className="bg-white p-6 rounded-3xl border border-gray-100 flex flex-wrap items-center justify-between gap-4">
         <div>

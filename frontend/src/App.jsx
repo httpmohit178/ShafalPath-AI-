@@ -13,6 +13,8 @@ import DsaRecommender from './pages/DsaRecommender';
 import LiveCoding from './pages/LiveCoding';
 import Rewards from './pages/Rewards';
 import AuthPage from './pages/AuthPage';
+import ResumeBuilder from './pages/ResumeBuilder';
+import JobBoards from './pages/JobBoards';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -25,6 +27,7 @@ function ProtectedLayout() {
       <div className="flex-1 flex flex-col">
         <Topbar />
         <main className="p-8 max-w-5xl w-full mx-auto">
+          {user?.demoMode && <div className="demo-mode-banner"><span>INTERACTIVE DEMO</span><p>Your practice progress is saved in this browser. Connect MongoDB and add a Gemini API key to turn on live AI and sync your account.</p></div>}
           <Outlet />
         </main>
       </div>
@@ -44,6 +47,8 @@ export default function App() {
           <Route element={<ProtectedLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/resume" element={<ResumeAnalyzer />} />
+            <Route path="/resume-builder" element={<ResumeBuilder />} />
+            <Route path="/jobs" element={<JobBoards />} />
             <Route path="/jd-matcher" element={<JdMatcher />} />
             <Route path="/roadmap" element={<Roadmap />} />
             <Route path="/interview" element={<MockInterview />} />

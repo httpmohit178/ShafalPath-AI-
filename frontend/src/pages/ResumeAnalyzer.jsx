@@ -1,76 +1,40 @@
 import { useState } from 'react';
-import { Upload, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Copy, Download, FileText, Lightbulb, Sparkles, Upload } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { API, useAuth } from '../context/AuthContext';
 
 export default function ResumeAnalyzer() {
   const { user, syncUser } = useAuth();
-  const [targetRole, setTargetRole] = useState(user?.targetRole || '');
+  const [targetRole, setTargetRole] = useState(user?.targetRole || 'Software Engineer');
   const [resumeText, setResumeText] = useState(user?.resumeText || '');
-  const [file, setFile] = useState(null);
-  const [analysis, setAnalysis] = useState(null);
-  const [loading, setLoading] = useState(false);
-
+  const [file, setFile] = useState(null); const [analysis, setAnalysis] = useState(() => user?.resumeRewrite ? { atsScore: user.atsScore || 0, summary: 'Saved resume review. Re-run analysis for updated feedback.', skills: user.skills || [], missingSkills: user.missingSkills || [], strengths: [], experienceInsights: [], improvements: [], suggestedProjects: [], correctedResume: user.resumeRewrite } : null);
+  const [loading, setLoading] = useState(false); const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+  const downloadText = (name, content) => { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' })); link.download = name; link.click(); URL.revokeObjectURL(link.href); };
   const handleAnalyze = async () => {
-    setLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append('targetRole', targetRole);
-      formData.append('resumeText', resumeText);
-      if (file) formData.append('resumePdf', file);
-
-      const { data } = await API.post('/ai/analyze-resume', formData);
-      setAnalysis(data.analysis);
-      syncUser(data.user, data.levelInfo);
-    } catch (err) {
-      alert(err.response?.data?.error || 'Error analyzing resume');
-    } finally {
-      setLoading(false);
-    }
+    if (!file && !resumeText.trim()) { setError('Upload your resume or paste its text to begin.'); return; }
+    if (user?.demoMode && file?.type === 'application/pdf' && !resumeText.trim()) { setError('PDF text extraction needs the backend. Paste the resume text here, or start the backend to analyze this PDF.'); return; }
+    setLoading(true); setError('');
+    try { const body = new FormData(); body.append('targetRole', targetRole); body.append('resumeText', file && file.type !== 'application/pdf' ? await file.text() : resumeText); if (file) body.append('resumePdf', file); const { data } = await API.post('/ai/analyze-resume', body); setAnalysis(data.analysis); syncUser(data.user, data.levelInfo); }
+    catch (err) { setError(err.response?.data?.error || 'Resume analysis failed. Check that the backend and AI key are configured.'); }
+    finally { setLoading(false); }
   };
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-3xl border border-orange-100 space-y-4">
-        <div>
-          <label className="text-xs font-semibold text-gray-600">Target role</label>
-          <input value={targetRole} onChange={(e) => setTargetRole(e.target.value)} placeholder="e.g. Frontend Developer, Data Analyst" className="w-full mt-1 px-4 py-3 rounded-xl border border-gray-200 text-sm" />
-        </div>
-
-        <label className="border-2 border-dashed border-orange-200 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-orange-50/40">
-          <Upload className="text-[#FF6B00] mb-2" size={24} />
-          <span className="text-sm font-medium">{file ? file.name : 'Upload resume PDF or .txt'}</span>
-          <input type="file" accept=".pdf,.txt" onChange={(e) => setFile(e.target.files[0])} className="hidden" />
-        </label>
-
-        <div className="text-center text-xs text-gray-400">— or paste text —</div>
-
-        <textarea rows={5} value={resumeText} onChange={(e) => setResumeText(e.target.value)} placeholder="Paste your resume text here..." className="w-full p-4 rounded-xl border border-gray-200 text-sm" />
-
-        <button onClick={handleAnalyze} disabled={loading} className="w-full bg-[#FF6B00] text-white py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-orange-600">
-          <Sparkles size={18} /> {loading ? 'Analyzing with AI...' : 'Analyze resume'}
-        </button>
-      </div>
-
-      {analysis && (
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-lg">ATS Compatibility Score</h3>
-            <span className="text-3xl font-extrabold text-[#FF6B00]">{analysis.atsScore}/100</span>
-          </div>
-          <div>
-            <p className="text-xs font-bold text-gray-500 mb-2">EXTRACTED SKILLS</p>
-            <div className="flex flex-wrap gap-2">
-              {analysis.skills?.map((s) => <span key={s} className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium">{s}</span>)}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-bold text-gray-500 mb-2">MISSING SKILLS FOR {targetRole.toUpperCase()}</p>
-            <div className="flex flex-wrap gap-2">
-              {analysis.missingSkills?.map((s) => <span key={s} className="px-3 py-1 bg-red-50 text-red-600 rounded-full text-xs font-medium">{s}</span>)}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <div className="space-y-6 resume-page">
+    <div className="resume-heading-row"><div><span className="eyebrow"><Sparkles size={14}/> PERSONALIZED RESUME REVIEW</span><h1 className="page-title">Turn your resume into a plan.</h1><p className="page-subtitle">Get a detailed role match, evidence based skills gaps, and concrete next steps.</p></div><div><Link to="/resume-builder" className="secondary-button">Build a resume</Link><Link to="/jobs" className="primary-button">Find jobs</Link></div></div>
+    <section className="theme-card resume-form">
+      <label>Target role<input value={targetRole} onChange={(e) => setTargetRole(e.target.value)} placeholder="e.g. Frontend Developer"/></label>
+      <label className="upload-zone"><Upload size={24}/><b>{file ? file.name : 'Choose a PDF or text resume'}</b><small>PDF or .txt · max 5 MB</small><input type="file" accept=".pdf,.txt,application/pdf,text/plain" onChange={(e) => setFile(e.target.files?.[0] || null)}/></label>
+      <div className="or-divider">or paste resume text</div><textarea rows={7} value={resumeText} onChange={(e) => setResumeText(e.target.value)} placeholder="Paste your resume here…"/>
+      {error && <p className="inline-error"><AlertCircle size={16}/>{error}</p>}
+      <button className="primary-button" disabled={loading} onClick={handleAnalyze}><Sparkles size={17}/>{loading ? 'Analyzing your experience…' : 'Analyze my resume'}</button>
+    </section>
+    {analysis && <div className="resume-results">
+      <section className="theme-card ats-card"><div><small>ATS ROLE MATCH</small><b>{analysis.atsScore}<i>/100</i></b><p>{analysis.summary}</p></div><div className="ats-ring" style={{'--score':`${analysis.atsScore}%`}}><span>{analysis.atsScore}%</span></div></section>
+      <section className="theme-card result-section"><h2><CheckCircle2 size={19}/> Skills found in your resume</h2><div className="skill-chips">{analysis.skills?.map((s) => <span key={s}>{s}</span>)}</div><h3>Role skills to build</h3><div className="skill-chips missing">{analysis.missingSkills?.map((s) => <span key={s}>{s}</span>)}</div></section>
+      {analysis.skillGaps?.length > 0 && <section className="theme-card result-section"><h2><Lightbulb size={19}/> Your skill gap plan</h2><div className="gap-grid">{analysis.skillGaps.map((gap) => <article key={gap.skill}><b>{gap.skill}</b><p>{gap.whyItMatters}</p><small>NEXT STEP</small><p>{gap.nextStep}</p></article>)}</div></section>}
+      {analysis.issues?.length > 0 && <section className="theme-card result-section"><h2><AlertCircle size={19}/> Issues to fix in your resume</h2><div className="gap-grid">{analysis.issues.map((issue, idx) => <article key={`${issue.issue}-${idx}`}><b>{issue.issue}</b><p>{issue.whyItHurts}</p><small>HOW TO FIX</small><p>{issue.fix}</p></article>)}</div></section>}
+      <div className="result-columns"><section className="theme-card result-section"><h2><FileText size={19}/> What’s already working</h2><ul>{analysis.strengths?.map((x) => <li key={x}>{x}</li>)}</ul><h3>Experience insights</h3><ul>{analysis.experienceInsights?.map((x) => <li key={x}>{x}</li>)}</ul></section><section className="theme-card result-section"><h2><Sparkles size={19}/> Make your resume stronger</h2><ul>{analysis.improvements?.map((x) => <li key={x}>{x}</li>)}</ul><h3>Project ideas</h3><ul>{analysis.suggestedProjects?.map((x) => <li key={x}>{x}</li>)}</ul></section></div>
+      {analysis.correctedResume && <section className="theme-card result-section corrected-resume"><div className="corrected-header"><div><h2><CheckCircle2 size={19}/> ATS-ready resume format</h2><p>Rewritten with your facts preserved. Review placeholders and verify every detail before applying.</p></div><div><button className="secondary-button" onClick={async () => { await navigator.clipboard.writeText(analysis.correctedResume); setCopied(true); setTimeout(() => setCopied(false), 1800); }}><Copy size={14}/>{copied ? 'Copied' : 'Copy'}</button><button className="secondary-button" onClick={() => downloadText('safalpath-resume-draft.txt', analysis.correctedResume)}><Download size={14}/>Download</button></div></div><pre>{analysis.correctedResume}</pre><Link className="primary-button" to="/resume-builder">Open resume builder <FileText size={16}/></Link></section>}
+    </div>}
+  </div>;
 }
