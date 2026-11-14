@@ -20,7 +20,7 @@
 ## ✨ What you can do
 
 - 📄 **Review a resume:** paste text or upload a selectable-text PDF/TXT, choose a target role, inspect skills and common issues, and get a structured draft.
-- 🧾 **Build and export:** edit a live resume preview, save the draft to your account, and print/save it as a PDF.
+- 🧾 **Build and export:** choose from four resume layouts (Classic, Modern, Compact, Executive), edit a live preview, save the draft to your account, and print/save a clean A4 PDF.
 - 🎯 **Match a job description:** compare your saved resume with a role and review matched skills, missing terms, and next steps.
 - 🗺️ **Create a study roadmap:** generate week-by-week activities based on target role, skill gaps, available weeks, and hours per day.
 - 🎤 **Practice with Aria:** complete a five-question role-focused interview with spoken prompts, typed or microphone answers, feedback, and scores.
