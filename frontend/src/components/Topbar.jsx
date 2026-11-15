@@ -40,6 +40,7 @@ const PAGE_TITLES = {
   '/jd-matcher': 'Job Description Matcher',
   '/dsa': 'DSA Problem Recommender',
   '/coding': 'Live DSA Arena',
+  '/assessment': 'Protected Assessment',
   '/interview': 'AI Mock Interviewer',
   '/roadmap': 'Placement Roadmap',
   '/rewards': 'XP & Badges',

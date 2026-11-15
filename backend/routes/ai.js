@@ -98,6 +98,10 @@ router.post('/interview', auth, async (req, res) => {
       ? `You are Aria, a warm but rigorous interviewer. Interview for role: ${role}. Interview focus: ${round}. ${roundGuidance} Score the answer fairly for this role. Candidate resume context: ${experienceRound ? (resumeContext || 'No resume uploaded; do not assume experience.') : 'Do not use the resume to turn this into a project question.'} Candidate profile skills: ${(candidate?.skills || []).join(', ')}. Conversation so far: ${JSON.stringify(history).slice(-6000)}. Latest answer: ${JSON.stringify(userAnswer)}. Return JSON with score (integer 1-10 based on relevance, clarity, evidence, and role fit), feedback (two specific sentences: one evidence-based strength and one actionable improvement), and nextQuestion (one focused, new question for this role and interview focus). Do not invent candidate experience. Do not repeat these previously asked questions: ${JSON.stringify(askedQuestions)}.`
       : `You are Aria, an encouraging but realistic interviewer. Interview for role: ${role}. Interview focus: ${round}. ${roundGuidance} Ask exactly one specific, open-ended first question appropriate to this role and focus. This may be any career, including non-technical work. ${experienceRound ? `Candidate resume context: ${resumeContext || 'No resume uploaded; ask for a real experience example without assuming one.'} Use a resume detail only if it clearly supports the question.` : 'Ignore resume project details for this question; ask about the selected role and focus instead.'} Candidate skills: ${(candidate?.skills || []).join(', ')}. Return JSON: {"nextQuestion":"...","score":null,"feedback":""}.`;
     const local = localInterviewReply({ role, round, history, userAnswer, resumeText: candidate?.resumeText });
+    if (req.body.timedOut === true && !String(userAnswer || '').trim()) {
+      const next = localInterviewReply({ role, round, history, resumeText: candidate?.resumeText });
+      return res.json({ score: 1, feedback: 'The five-minute response window ended before an answer was submitted. Use the next question to practise a concise response.', nextQuestion: next.nextQuestion, mode: 'local' });
+    }
     const generated = parseJson(await generate(prompt, true));
     const score = userAnswer && Number.isFinite(Number(generated.score)) ? Math.max(1, Math.min(10, Math.round(Number(generated.score)))) : null;
     const feedback = typeof generated.feedback === 'string' ? generated.feedback.slice(0, 1200) : '';
@@ -114,6 +118,10 @@ router.post('/interview', auth, async (req, res) => {
     const { role = 'Software Development Engineer', round = 'Role skills & scenarios', userAnswer } = req.body;
     const history = Array.isArray(req.body.history) ? req.body.history.slice(-12) : [];
     const candidate = await User.findById(req.user.id).select('resumeText').catch(() => null);
+    if (req.body.timedOut === true && !String(userAnswer || '').trim()) {
+      const next = localInterviewReply({ role, round, history, resumeText: candidate?.resumeText });
+      return res.json({ score: 1, feedback: 'The five-minute response window ended before an answer was submitted. Use the next question to practise a concise response.', nextQuestion: next.nextQuestion, mode: 'local' });
+    }
     res.json({ ...localInterviewReply({ role, round, history, userAnswer, resumeText: candidate?.resumeText }), mode: 'local' });
   }
 });
@@ -216,8 +224,13 @@ router.post('/dsa-recommend', auth, async (req, res) => {
 router.post('/coding-challenge', auth, async (req, res) => {
   try {
     const { topic = 'Arrays', difficulty = 'Easy' } = req.body;
-    const challenge = parseJson(await generate(`Create one original LeetCode-style interview coding challenge. Topic: ${topic}. Difficulty: ${difficulty}. Return valid JSON with fields: title (short), difficulty (Easy|Medium|Hard), topic, acceptance (N/A), statement, examples (array of input/output with explanation), constraints (array), hint, expectedOutput (exact output of the included sample harness, no explanation), and starterCode object with runnable JavaScript, Python, C++, and Java strings. Each starter must define a clearly named solution function/method with TODO body, include a small sample invocation, and print the result. Keep the same sample input and exact expected output in all four starter programs. Ensure imports, types, method signatures, and print formatting compile in the selected runtime. Do not include a solution.`, true));
-    res.json(challenge);
+    const previousTitles = (Array.isArray(req.body.previousTitles) ? req.body.previousTitles : []).filter((title) => typeof title === 'string').slice(-8);
+    const requestVariation = String(req.body.variation || Math.random().toString(36).slice(2)).slice(0, 80);
+    const prompt = `Create one original, varied LeetCode-style interview coding challenge. Topic or pattern: ${topic}. Difficulty: ${difficulty}. Variation seed: ${requestVariation}. Do not repeat or closely rephrase these recently used titles: ${JSON.stringify(previousTitles)}. Choose a genuinely different problem each time, with a concrete sample that can be run as written. Return valid JSON with fields: title (short), difficulty (Easy|Medium|Hard), topic, acceptance (N/A), statement, examples (array of input/output with explanation), constraints (array), hint, expectedOutput (exact output of the included sample harness, no explanation), and starterCode object with runnable JavaScript, Python, C++, and Java strings. Each starter must define a clearly named solution function/method with TODO body, include a small sample invocation, and print the result. Keep the same sample input and exact expected output in all four starter programs. Ensure imports, types, method signatures, and print formatting compile in the selected runtime. Do not include a solution.`;
+    const challenge = parseJson(await generate(prompt, true));
+    if (!challenge.title || !challenge.statement || !challenge.expectedOutput || !challenge.starterCode?.javascript) throw new Error('AI returned an incomplete coding challenge.');
+    if (previousTitles.some((title) => title.toLowerCase() === String(challenge.title).toLowerCase())) throw new Error('AI repeated a recent coding challenge title.');
+    res.json({ ...challenge, generatedBy: 'ai' });
   } catch (err) { respondError(res, err); }
 });
 

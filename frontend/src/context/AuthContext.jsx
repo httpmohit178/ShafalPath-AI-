@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { localInterviewReply } from '../lib/localInterview';
 import { localDsaRecommendations } from '../lib/localDsa';
+import { makeLocalChallenge } from '../lib/localChallenges';
 
 const AuthContext = createContext();
 export const API = axios.create({
@@ -45,6 +46,7 @@ API.interceptors.response.use((r) => r, (error) => {
   const local = getDemoUser();
   const ok = (data) => Promise.resolve({ data, status: 200, config: error.config });
   if (localFallback && url.includes('/ai/interview')) {
+    if (body.timedOut && !String(body.userAnswer || '').trim()) return ok({ score: 1, feedback: 'The five-minute response window ended before an answer was submitted. Use the next question to practise a concise response.', nextQuestion: localInterviewReply({ ...body, userAnswer: null, resumeText: local?.resumeText || '' }).nextQuestion, mode: 'local' });
     return ok(localInterviewReply({ ...body, resumeText: local?.resumeText || '' }));
   }
   if (localFallback && url.includes('/ai/chat')) return ok({ reply: 'I’m here to help you prepare. Start with one focused goal today: practice a DSA pattern, sharpen one resume bullet, or rehearse a project story. Which would you like to tackle?' });
@@ -62,7 +64,7 @@ API.interceptors.response.use((r) => r, (error) => {
   }
   if (localFallback && url.includes('/ai/dsa-recommend')) return ok(localDsaRecommendations(body.topics || ['Arrays', 'Graphs'], body.company || 'Daily mix'));
   if (localFallback && url.includes('/user/leaderboard')) return ok([{ ...(local || { _id: 'demo-user', name: 'You', xp: 120, streak: { current: 4 } }) }]);
-  if (localFallback && url.includes('/ai/coding-challenge')) return ok({ title: 'Pair Sum Practice', difficulty: body.difficulty || 'Easy', topic: body.topic || 'Arrays', acceptance: 'Local practice', expectedOutput: '[0,1]', statement: 'Given an integer array and a target value, return the indices of two values whose sum equals the target.', examples: ['nums = [2,7,11,15], target = 9 → [0,1]'], constraints: ['2 ≤ nums.length ≤ 10⁴', 'Exactly one answer exists.'], hint: 'Use a map to find the complement as you scan.', starterCode: { javascript: '// Return the indices of the two values that sum to target.\nfunction twoSum(nums, target) {\n  // Write your solution here\n}\nconsole.log(JSON.stringify(twoSum([2, 7, 11, 15], 9)));', python: 'import json\ndef two_sum(nums, target):\n    # Return the two matching indices.\n    pass\nprint(json.dumps(two_sum([2, 7, 11, 15], 9), separators=(",", ":")))', cpp: '#include <bits/stdc++.h>\nusing namespace std;\nvector<int> twoSum(vector<int>& nums, int target) {\n    // Return the two matching indices.\n    return {};\n}\nint main() { vector<int> nums{2,7,11,15}; auto ans=twoSum(nums,9); cout << "[" << ans[0] << "," << ans[1] << "]"; }', java: 'class Main {\n  static int[] twoSum(int[] nums, int target) {\n    // Return the two matching indices.\n    return new int[0];\n  }\n  public static void main(String[] args) { int[] a=twoSum(new int[]{2,7,11,15},9); System.out.print("["+a[0]+","+a[1]+"]"); }\n}' } });
+  if (localFallback && url.includes('/ai/coding-challenge')) return ok(makeLocalChallenge(body.previousTitles || [], body.difficulty || 'Easy'));
   if (localFallback && url.includes('/ai/run-code')) {
     if (body.language !== 'javascript') {
       if (error.response) return Promise.reject(error);

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, LayoutDashboard, FileText, Target, Map, Mic, ListChecks, Code2, Trophy, Flame, Bell, Briefcase } from 'lucide-react';
+import { Home, LayoutDashboard, FileText, Target, Map, Mic, ListChecks, Code2, Trophy, Flame, Bell, Briefcase, ClipboardCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import BrandLogo from './BrandLogo';
 
@@ -14,6 +14,7 @@ const links = [
   { name: 'Mock Interview', path: '/interview', icon: Mic },
   { name: 'DSA Recommender', path: '/dsa', icon: ListChecks },
   { name: 'Live Coding', path: '/coding', icon: Code2 },
+  { name: 'Assessment', path: '/assessment', icon: ClipboardCheck },
   { name: 'Rewards', path: '/rewards', icon: Trophy },
 ];
 
