@@ -8,7 +8,7 @@ const router = express.Router();
 const todayKey = () => new Date().toISOString().slice(0, 10);
 const resetDailyIfNeeded = (user) => {
   const today = todayKey();
-  if (user.dailyQuests.date !== today) user.dailyQuests = { date: today, dsaDone: false, interviewDone: false, codingDone: false };
+  if (user.dailyQuests.date !== today) user.dailyQuests = { date: today, dsaDone: false, interviewDone: false, codingDone: false, assessmentDone: false };
   return today;
 };
 
@@ -97,6 +97,24 @@ router.post('/coding/complete', auth, async (req, res) => {
     }
     completeWeeklyChallenge(user, 'arena-problem');
     await user.save(); res.json({ user, levelInfo: user.getLevelInfo() });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/assessment/complete', auth, async (req, res) => {
+  try {
+    const categories = ['JavaScript', 'React', 'Web fundamentals'];
+    const category = categories.includes(req.body.category) ? req.body.category : null;
+    const score = Number(req.body.score); const total = Number(req.body.total); const warnings = Number(req.body.warnings) || 0;
+    if (!category || total !== 5 || !Number.isInteger(score) || score < 0 || score > total || !Number.isInteger(warnings) || warnings < 0 || warnings > 20) return res.status(400).json({ error: 'Assessment result is invalid.' });
+    const user = req.user; const today = resetDailyIfNeeded(user);
+    user.assessmentHistory.unshift({ category, score, total, warnings, date: today });
+    user.assessmentHistory = user.assessmentHistory.slice(0, 30);
+    let xpAwarded = 0;
+    if (!user.dailyQuests.assessmentDone) { user.dailyQuests.assessmentDone = true; user.xp += 25; xpAwarded = 25; user.activityLog.unshift({ date: today, title: `Completed ${category} assessment · ${score}/${total}`, score: 25 }); }
+    if (score >= 4 && !user.badges.includes('Assessment Ace')) user.badges.push('Assessment Ace');
+    if (warnings === 0 && !user.badges.includes('Focused Mind')) user.badges.push('Focused Mind');
+    const weeklyXpAwarded = completeWeeklyChallenge(user, 'assessment-week') ? 60 : 0;
+    await user.save(); res.json({ user, levelInfo: user.getLevelInfo(), xpAwarded, weeklyXpAwarded });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

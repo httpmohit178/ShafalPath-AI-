@@ -49,12 +49,14 @@ const userSchema = new mongoose.Schema({
     confidence: Number,
     date: { type: String, default: () => new Date().toISOString().split('T')[0] }
   }],
+  assessmentHistory: [{ category: String, score: Number, total: Number, warnings: Number, date: String }],
   badges: [{ type: String }],
   dailyQuests: {
     date: { type: String, default: () => new Date().toISOString().split('T')[0] },
     dsaDone: { type: Boolean, default: false },
     interviewDone: { type: Boolean, default: false },
-    codingDone: { type: Boolean, default: false }
+    codingDone: { type: Boolean, default: false },
+    assessmentDone: { type: Boolean, default: false }
   },
   weeklyChallenges: {
     weekKey: { type: String, default: '' },

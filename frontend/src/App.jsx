@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
@@ -20,8 +20,10 @@ import Assessment from './pages/Assessment';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <div className="p-10 text-center">Loading SafalPath...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (location.pathname === '/assessment') return <Outlet />;
 
   return (
     <div className="flex min-h-screen bg-[#FAF8F5]">

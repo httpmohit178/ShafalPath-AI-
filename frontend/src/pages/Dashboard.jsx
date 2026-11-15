@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Flame, Zap, ListChecks, Map, Trophy } from 'lucide-react';
+import { Flame, Zap, ListChecks, Map, Trophy, CheckCircle2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { Sparkles } from 'lucide-react';
@@ -10,6 +10,17 @@ export default function Dashboard() {
   const totalTasks = user?.roadmap?.plan?.reduce((acc, w) => acc + w.tasks.length, 0) || 0;
   const doneTasks = user?.roadmap?.plan?.reduce((acc, w) => acc + w.tasks.filter((t) => t.completed).length, 0) || 0;
   const roadmapPct = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
+  const interviewAverage = user?.interviewHistory?.length ? Math.round(user.interviewHistory.slice(0, 5).reduce((sum, item) => sum + (item.score || 0), 0) / Math.min(user.interviewHistory.length, 5)) : 0;
+  const assessmentBest = user?.assessmentHistory?.length ? Math.max(...user.assessmentHistory.map((item) => Math.round((item.score / item.total) * 100))) : 0;
+  const readinessItems = [
+    { label: 'Resume', score: user?.atsScore || 0, active: Boolean(user?.resumeText), to: '/resume', cta: 'Review resume' },
+    { label: 'Interview practice', score: interviewAverage, active: Boolean(user?.interviewHistory?.length), to: '/interview', cta: 'Practise with Aria' },
+    { label: 'Skills assessment', score: assessmentBest, active: Boolean(user?.assessmentHistory?.length), to: '/assessment', cta: 'Take an assessment' },
+    { label: 'Problem solving', score: Math.min(100, (user?.dsaSolved?.length || 0) * 10), active: Boolean(user?.dsaSolved?.length), to: '/dsa', cta: 'Solve a problem' },
+  ];
+  const measuredReadiness = readinessItems.filter((item) => item.active);
+  const readinessScore = measuredReadiness.length ? Math.round(measuredReadiness.reduce((sum, item) => sum + item.score, 0) / measuredReadiness.length) : 0;
+  const nextReadinessStep = readinessItems.find((item) => !item.active) || [...readinessItems].sort((a, b) => a.score - b.score)[0];
 
   const trendData = user?.interviewHistory?.length
     ? user.interviewHistory.map((item, idx) => ({ name: `#${idx + 1}`, score: item.score }))
@@ -26,6 +37,8 @@ export default function Dashboard() {
           Analyze resume
         </Link>
       </div>
+
+      <section className="readiness-card theme-card"><div className="readiness-summary"><span className="eyebrow"><CheckCircle2 size={13}/> YOUR PLACEMENT PREP</span><h2>Readiness snapshot</h2><p>Use your recent practice to choose what to work on next.</p><div className="readiness-score" style={{'--readiness': `${readinessScore}%`}}><div><b>{readinessScore}</b><small>/100</small></div></div><Link to={nextReadinessStep.to} className="primary-button">{nextReadinessStep.cta}</Link><small className="readiness-note">A progress guide based on your SafalPath activity, not a hiring prediction.</small></div><div className="readiness-breakdown">{readinessItems.map((item) => <div className="readiness-metric" key={item.label}><div><b>{item.label}</b><span>{item.active ? `${item.score}%` : 'Not started'}</span></div><div className="readiness-track"><i style={{width:`${item.active ? item.score : 0}%`}}/></div><Link to={item.to}>{item.active ? 'Open' : 'Start'}</Link></div>)}</div></section>
 
       <Link to="/interview" className="aria-dashboard-card"><AriaAvatar size={84}/><div><span className="aria-dashboard-kicker"><Sparkles size={13}/> PRACTICE WITH ARIA</span><h2>Ready for a quick interview round?</h2><p>Get five role-specific questions and actionable feedback. Local practice works even when AI is offline.</p></div><span className="aria-dashboard-cta">Start practice →</span></Link>
 
