@@ -106,7 +106,7 @@ router.post('/coding/complete', auth, async (req, res) => {
 
 router.post('/assessment/complete', auth, async (req, res) => {
   try {
-    const categories = ['JavaScript', 'React', 'Web fundamentals'];
+    const categories = ['JavaScript', 'React', 'Web fundamentals', 'Coding challenge'];
     const category = categories.includes(req.body.category) ? req.body.category : null;
     const score = Number(req.body.score); const total = Number(req.body.total); const warnings = Number(req.body.warnings) || 0;
     if (!category || total !== 5 || !Number.isInteger(score) || score < 0 || score > total || !Number.isInteger(warnings) || warnings < 0 || warnings > 20) return res.status(400).json({ error: 'Assessment result is invalid.' });

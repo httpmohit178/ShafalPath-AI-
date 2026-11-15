@@ -35,7 +35,9 @@ const starterFor = (item, language) => {
   if (language === 'javascript' && typeof item?.starterCode === 'string') return item.starterCode;
   return curatedStarters[item?.id]?.[language] || starts[language] || '';
 };
-const expectedFor = (item, language) => typeof item?.expectedOutput === 'object' ? (item.expectedOutput[language] ?? item.expectedOutput.javascript ?? '') : (item?.expectedOutput || '');
+const expectedFor = (item, language) => { const value = typeof item?.expectedOutput === 'object' ? (item.expectedOutput[language] ?? item.expectedOutput.javascript ?? '') : item?.expectedOutput; return typeof value === 'string' || typeof value === 'number' ? String(value) : ''; };
+const asList = (value) => Array.isArray(value) ? value.filter((item) => typeof item === 'string') : typeof value === 'string' && value.trim() ? [value.trim()] : [];
+const asText = (value, fallback) => typeof value === 'string' && value.trim() ? value.trim() : fallback;
 
 export default function LiveCoding() {
   const { syncUser } = useAuth(); const location = useLocation(); const navigate = useNavigate(); const [problem, setProblem] = useState(problems[0]); const [language, setLanguage] = useState('javascript'); const [generating, setGenerating] = useState(false); const [problemError, setProblemError] = useState('');
@@ -44,7 +46,7 @@ export default function LiveCoding() {
   const [protectedMode, setProtectedMode] = useState(false); const [focusWarnings, setFocusWarnings] = useState(0); const [requestedDifficulty, setRequestedDifficulty] = useState('Random'); const [requestedTopic, setRequestedTopic] = useState('Random topic');
   useEffect(() => { if (!protectedMode) return; const onVisibility = () => { if (document.hidden) setFocusWarnings((n) => n + 1); }; document.addEventListener('visibilitychange', onVisibility); return () => document.removeEventListener('visibilitychange', onVisibility); }, [protectedMode]);
   const toggleProtectedMode = async () => { if (protectedMode) { setProtectedMode(false); return; } setProtectedMode(true); setFocusWarnings(0); try { await document.documentElement.requestFullscreen?.(); } catch { /* Fullscreen is optional in browsers that block it. */ } };
-  const chooseProblem = (item) => { setProblem(item); setCode(starterFor(item, language)); setOutput(''); setError(''); setAiReview(''); setRan(false); setPassedTest(false); setSubmissionMessage(''); };
+  const chooseProblem = (item) => { if (!item) return; setProblem(item); setCode(starterFor(item, language)); setOutput(''); setError(''); setAiReview(''); setRan(false); setPassedTest(false); setSubmissionMessage(''); };
   const generateChallenge = async (seed = null) => {
     setGenerating(true); setProblemError(''); setSubmissionMessage('');
     const topics = ['Arrays and hash maps', 'Strings and two pointers', 'Stacks and queues', 'Greedy algorithms', 'Binary search', 'Linked lists', 'Trees and recursion', 'Sliding window', 'Sorting'];
@@ -52,7 +54,8 @@ export default function LiveCoding() {
     const difficulty = seed?.difficulty || (requestedDifficulty === 'Random' ? ['Easy', 'Easy', 'Medium', 'Medium', 'Hard'][Math.floor(Math.random() * 5)] : requestedDifficulty);
     try {
       const { data } = await API.post('/ai/coding-challenge', { topic, difficulty, previousTitles: recentTitles.slice(-8), variation: `${Date.now()}-${Math.random()}` }, { timeout: 18000 });
-      const generated = { ...data, id: data.id || `ai-${Date.now()}`, acceptance: data.acceptance || 'New', topic: data.topic || topic, practiceFor: seed?.title || '', examples: data.examples || [], constraints: data.constraints || [], hint: data.hint || 'Try a small example by hand before coding.', expectedOutput: data.expectedOutput || '', starterCode: data.starterCode || {}, starter: typeof data.starterCode === 'string' ? data.starterCode : data.starterCode?.javascript || problems[0].starter, generatedBy: data.generatedBy || 'ai' };
+      if (!data || typeof data.title !== 'string' || typeof data.statement !== 'string' || !data.expectedOutput || typeof data.starterCode?.javascript !== 'string') throw new Error('The challenge response was incomplete.');
+      const generated = { ...data, id: data.id || `ai-${Date.now()}`, title: asText(data.title, 'Untitled challenge'), statement: asText(data.statement, 'Read the examples and implement the requested solution.'), difficulty: asText(data.difficulty, difficulty), acceptance: asText(data.acceptance, 'New'), topic: asText(data.topic, topic), practiceFor: seed?.title || '', examples: asList(data.examples), constraints: asList(data.constraints), hint: asText(data.hint, 'Try a small example by hand before coding.'), expectedOutput: data.expectedOutput || '', starterCode: typeof data.starterCode === 'object' && data.starterCode ? data.starterCode : {}, starter: typeof data.starterCode === 'string' ? data.starterCode : data.starterCode?.javascript || problems[0].starter, generatedBy: asText(data.generatedBy, 'ai') };
       setProblem(generated); setRecentTitles((titles) => [...titles, generated.title].slice(-8)); setLanguage('javascript'); setCode(starterFor(generated, 'javascript')); setOutput(''); setError(''); setAiReview(''); setRan(false); setPassedTest(false);
     } catch (err) {
       const local = makeLocalChallenge(recentTitles, difficulty, topic); setProblem(local); setRecentTitles((titles) => [...titles, local.title].slice(-8)); setLanguage('javascript'); setCode(starterFor(local, 'javascript')); setOutput(''); setError(''); setAiReview(''); setRan(false); setPassedTest(false); setProblemError(`${err.response?.data?.error || 'AI challenge service timed out or is unavailable.'} Loaded a varied local practice problem instead.`);
