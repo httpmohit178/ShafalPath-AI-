@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
 const crypto = require('crypto');
+const { recordDailyActivity } = require('../utils/streak');
 
 const router = express.Router();
 const signToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -54,15 +55,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email or password' });
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    if (user.streak.lastActiveDate === yesterday) {
-      user.streak.current += 1;
-      user.streak.best = Math.max(user.streak.best, user.streak.current);
-    } else if (user.streak.lastActiveDate !== today) {
-      user.streak.current = 1;
-    }
-    user.streak.lastActiveDate = today;
+    recordDailyActivity(user);
     await user.save();
 
     res.json({ token: signToken(user._id), user: publicUser(user), levelInfo: user.getLevelInfo() });

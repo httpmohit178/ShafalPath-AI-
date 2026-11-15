@@ -3,6 +3,7 @@ const auth = require('../middleware/auth');
 const User = require('../models/User');
 const { randomInt } = require('crypto');
 const { completeWeeklyChallenge } = require('../utils/weeklyChallenge');
+const { recordDailyActivity } = require('../utils/streak');
 
 const router = express.Router();
 const todayKey = () => new Date().toISOString().slice(0, 10);
@@ -16,6 +17,7 @@ router.post('/roadmap/toggle', auth, async (req, res) => {
   try {
     const { weekIdx, taskIdx } = req.body;
     const user = req.user;
+    recordDailyActivity(user);
     if (!user.roadmap?.plan?.[weekIdx]?.tasks?.[taskIdx]) return res.status(404).json({ error: 'Roadmap task not found.' });
     const task = user.roadmap.plan[weekIdx].tasks[taskIdx];
     task.completed = !task.completed;
@@ -44,6 +46,7 @@ router.post('/dsa/solve', auth, async (req, res) => {
     const { title, topic, difficulty } = req.body;
     if (!title) return res.status(400).json({ error: 'Problem title is required.' });
     const user = req.user;
+    recordDailyActivity(user);
     resetDailyIfNeeded(user);
     const alreadySolved = user.dsaSolved.some((p) => p.title === title);
     if (!alreadySolved) {
@@ -73,6 +76,7 @@ router.post('/dsa/solve', auth, async (req, res) => {
 router.post('/interview/complete', auth, async (req, res) => {
   try {
     const user = req.user;
+    recordDailyActivity(user);
     const today = resetDailyIfNeeded(user);
     user.interviewHistory.unshift({ type: req.body.round || 'Mock interview', score: req.body.score || 0, date: today });
     user.activityLog.unshift({ date: today, title: `Aria interview · ${req.body.role || 'Career practice'}`, score: req.body.score || 0 });
@@ -88,7 +92,7 @@ router.post('/interview/complete', auth, async (req, res) => {
 
 router.post('/coding/complete', auth, async (req, res) => {
   try {
-    const user = req.user; const today = resetDailyIfNeeded(user);
+    const user = req.user; recordDailyActivity(user); const today = resetDailyIfNeeded(user);
     if (req.body.passedTest !== true) return res.status(400).json({ error: 'Pass the challenge sample test before submitting.' });
     if (!user.dailyQuests.codingDone) {
       user.dailyQuests.codingDone = true; user.xp += 40;
@@ -106,7 +110,7 @@ router.post('/assessment/complete', auth, async (req, res) => {
     const category = categories.includes(req.body.category) ? req.body.category : null;
     const score = Number(req.body.score); const total = Number(req.body.total); const warnings = Number(req.body.warnings) || 0;
     if (!category || total !== 5 || !Number.isInteger(score) || score < 0 || score > total || !Number.isInteger(warnings) || warnings < 0 || warnings > 20) return res.status(400).json({ error: 'Assessment result is invalid.' });
-    const user = req.user; const today = resetDailyIfNeeded(user);
+    const user = req.user; recordDailyActivity(user); const today = resetDailyIfNeeded(user);
     user.assessmentHistory.unshift({ category, score, total, warnings, date: today });
     user.assessmentHistory = user.assessmentHistory.slice(0, 30);
     let xpAwarded = 0;
@@ -122,7 +126,7 @@ router.put('/profile/avatar', auth, async (req, res) => {
   try {
     const allowed = ['🌱', '🚀', '🦊', '🐼', '🦉', '🐯', '🐸', '🦋', '🐙', '🦄'];
     if (!allowed.includes(req.body.avatar)) return res.status(400).json({ error: 'Choose an avatar from the SafalPath collection.' });
-    req.user.avatar = req.body.avatar; await req.user.save();
+    recordDailyActivity(req.user); req.user.avatar = req.body.avatar; await req.user.save();
     res.json({ user: req.user, levelInfo: req.user.getLevelInfo() });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -132,7 +136,7 @@ router.put('/resume-draft', auth, async (req, res) => {
     const fields = ['fullName', 'email', 'location', 'title', 'summary', 'skills', 'experience', 'projects', 'education'];
     const draft = {};
     fields.forEach((field) => { draft[field] = String(req.body[field] || '').slice(0, field === 'experience' || field === 'projects' ? 8000 : 1500); });
-    req.user.resumeDraft = draft; await req.user.save();
+    recordDailyActivity(req.user); req.user.resumeDraft = draft; await req.user.save();
     res.json({ user: req.user, levelInfo: req.user.getLevelInfo() });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -143,7 +147,7 @@ router.post('/rewards/spin', auth, async (req, res) => {
     if (user.lastSpinDate === today) return res.json({ user, levelInfo: user.getLevelInfo(), reward: user.lastSpinReward, alreadySpun: true });
     const prizes = [10, 15, 20, 25, 30, 40, 50, 75];
     const reward = prizes[randomInt(prizes.length)];
-    user.xp += reward; user.lastSpinDate = today; user.lastSpinReward = reward;
+    recordDailyActivity(user); user.xp += reward; user.lastSpinDate = today; user.lastSpinReward = reward;
     if (!user.badges.includes('Lucky Spinner')) user.badges.push('Lucky Spinner');
     user.activityLog.unshift({ date: today, title: 'Daily XP spin', score: reward });
     await user.save();

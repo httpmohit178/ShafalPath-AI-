@@ -10,8 +10,20 @@ export const API = axios.create({
 });
 
 const getDemoUser = () => JSON.parse(localStorage.getItem('safalpath_demo_user') || 'null');
+const touchDemoStreak = (user) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterdayDate = new Date(`${today}T00:00:00.000Z`); yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
+  const yesterday = yesterdayDate.toISOString().slice(0, 10);
+  const streak = { current: 0, best: 0, ...(user.streak || {}) };
+  if (streak.lastActiveDate !== today) {
+    streak.current = streak.lastActiveDate === yesterday ? streak.current + 1 : 1;
+    streak.best = Math.max(streak.best, streak.current);
+    streak.lastActiveDate = today;
+  }
+  return { ...user, streak };
+};
 const saveDemoUser = (updates = {}) => {
-  const next = { ...(getDemoUser() || {}), ...updates, demoMode: true };
+  const next = touchDemoStreak({ ...(getDemoUser() || {}), ...updates, demoMode: true });
   localStorage.setItem('safalpath_demo_user', JSON.stringify(next));
   return next;
 };
@@ -64,7 +76,7 @@ API.interceptors.response.use((r) => r, (error) => {
   }
   if (localFallback && url.includes('/ai/dsa-recommend')) return ok(localDsaRecommendations(body.topics || ['Arrays', 'Graphs'], body.company || 'Daily mix'));
   if (localFallback && url.includes('/user/leaderboard')) return ok([{ ...(local || { _id: 'demo-user', name: 'You', xp: 120, streak: { current: 4 } }) }]);
-  if (localFallback && url.includes('/ai/coding-challenge')) return ok(makeLocalChallenge(body.previousTitles || [], body.difficulty || 'Easy'));
+  if (localFallback && url.includes('/ai/coding-challenge')) return ok(makeLocalChallenge(body.previousTitles || [], body.difficulty || 'Easy', body.topic || 'Random topic'));
   if (localFallback && url.includes('/ai/run-code')) {
     if (body.language !== 'javascript') {
       if (error.response) return Promise.reject(error);
