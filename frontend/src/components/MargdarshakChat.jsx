@@ -48,7 +48,7 @@ export default function MargdarshakChat() {
             <button onClick={() => setOpen(false)} className="p-1 hover:bg-white/20 rounded-lg"><X size={18} /></button>
           </div>
 
-          <div className="h-64 overflow-y-auto p-4 space-y-3 bg-[#FAF8F5]">
+          <div className="chat-message-list h-64 overflow-y-auto p-4 space-y-3 bg-[#FAF8F5]">
             {messages.map((m, idx) => (
               <div key={idx} className={`p-3 rounded-2xl text-sm whitespace-pre-line ${m.sender === 'bot' ? 'bg-white text-gray-700 shadow-sm border border-gray-100' : 'bg-[#FF6B00] text-white ml-8'}`}>
                 {m.text}

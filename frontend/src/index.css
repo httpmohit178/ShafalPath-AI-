@@ -68,3 +68,38 @@ input,textarea,select{color:var(--text-main)}input:focus,textarea:focus,select:f
 
 .interview-ai-mode{display:inline-flex!important;align-items:center;border:1px solid #d9e6dc;border-radius:99px;padding:4px 7px!important;color:#477953!important;font-size:8px!important;font-weight:850;letter-spacing:.5px}.interview-ai-mode.local{background:#f7f1e8;border-color:#ebdac1;color:#886337!important}.interview-ai-mode.groq{background:#edf7ef;border-color:#cfe5d3;color:#34734a!important}.mic-fallback-notice{margin:8px 20px 0;padding:9px 12px;border:1px solid #cfe5d3;border-radius:10px;background:#f0f8f1;color:#34734a;font-size:10px;line-height:1.5}
 
+
+.protected-mode-button{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid #cfe0d2;border-radius:9px;background:#f2f8f3;color:#356d45;font-size:10px;font-weight:800;white-space:nowrap}.protected-mode-button.active{background:#356d45;color:#fff;border-color:#356d45}.protected-mode-notice{display:flex;align-items:center;gap:8px;padding:10px 13px;border:1px solid #cfe0d2;border-radius:11px;background:#f2f8f3;color:#315d45;font-size:10px;line-height:1.5}.protected-mode-notice button{margin-left:auto;border:0;background:transparent;color:#315d45;text-decoration:underline;font-weight:800;white-space:nowrap}
+@media print{@page{size:A4;margin:10mm}.resume-print{zoom:var(--print-zoom,1)!important;transform-origin:top left!important;width:100%!important;min-height:0!important;max-height:none!important}.resume-paper section{break-inside:avoid-page!important}.resume-paper{overflow:visible!important}}
+
+:root{--text-muted:#62685f;color-scheme:light}
+html.dark{--bg-page:#141713;--bg-card:#20241f;--text-main:#f1f1e9;--text-muted:#c2c8bd;--border-subtle:#3b4239;color-scheme:dark}
+.sidebar-reminder-card .text-gray-400{color:#c3c9d1!important}.sidebar-reminder-button{background:#fff!important;color:#121622!important}
+html.dark .bg-white{background-color:var(--bg-card)!important;color:var(--text-main)}
+html.dark .text-gray-700,html.dark .text-zinc-700,html.dark .text-gray-800,html.dark .text-gray-900{color:var(--text-main)!important}
+html.dark input::placeholder,html.dark textarea::placeholder{color:#a7b0a4;opacity:1}
+html.dark .theme-card a:not(.primary-button),html.dark .auth-switch a,html.dark .checklist-links a{color:#a9d7b1}
+html.dark .secondary-button,html.dark .preview-label,html.dark .aria-dashboard-cta{color:#a9d7b1}
+html.dark .theme-card :is(input,textarea,select){color:var(--text-main);background-color:var(--bg-page)}
+html.dark .theme-card :is(input,textarea,select)::placeholder{color:#a7b0a4}
+
+
+html.dark .aria-dashboard-card{background:linear-gradient(120deg,#20241f,#252d25);border-color:#3b493d}
+html.dark .aria-dashboard-kicker{color:#f0ad78;background:transparent}html.dark .aria-dashboard-card p{color:var(--text-muted)}
+html.dark .interview-setup{background:var(--bg-card)!important}html.dark .room-stage{background:var(--bg-page)!important}
+html.dark .score-chip,html.dark .feedback-box,html.dark .resume-local-note,html.dark .resume-clear-state{background:#252d25;color:#d4e8d5;border-color:#3b493d}
+html.dark .interview-ai-mode{background:#252d25;border-color:#3b493d;color:#c5e4ca!important}
+html.dark .interview-ai-mode.local{background:#302a20;border-color:#51402b;color:#f1d0a0!important}
+html.dark .interview-ai-mode.groq{background:#223126;border-color:#354c3b;color:#c5e4ca!important}
+html.dark .easy-pill,html.dark .complete-button{background:#26352a;color:#bce0c2}
+html.dark .skill-chips span{background:#26352a;color:#c5e4ca}
+html.dark .skill-chips.missing span{background:#352a23;color:#f0bc8c}
+html.dark .protected-mode-notice{background:#252d25;color:#d4e8d5;border-color:#3b493d}
+html.dark .resume-paper{color:#27332b!important}
+html.dark .resume-paper header b{color:#456c50!important}html.dark .resume-paper header small{color:#646e65!important}html.dark .resume-paper section h3{color:#3f6548!important}
+
+
+html.dark .chat-message-list{background:var(--bg-page)!important}
+html.dark .bg-gray-50,html.dark .bg-gray-100,html.dark .bg-gray-200,html.dark .bg-orange-50,html.dark .bg-orange-100{background-color:var(--bg-page)!important}
+html.dark .border-gray-50,html.dark .border-gray-100,html.dark .border-gray-200,html.dark .border-orange-100{border-color:var(--border-subtle)!important}
+

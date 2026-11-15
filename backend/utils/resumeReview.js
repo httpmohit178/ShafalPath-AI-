@@ -38,7 +38,9 @@ function localResumeAnalysis(text, targetRole = 'Software Engineer') {
   const email = source.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '[Add email]';
   const phone = source.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0] || '[Add phone]';
   const profile = source.match(/(?:https?:\/\/)?(?:www\.)?(?:linkedin\.com|github\.com)\/[^\s)]+/i)?.[0] || '[Add LinkedIn / portfolio if available]';
-  const correctedResume = `${firstLine}\n${targetRole}\n${email} · ${phone} · [Location] · ${profile}\n\nPROFESSIONAL SUMMARY\n[Write 2–3 specific, factual lines connecting your experience and strengths to ${targetRole}.]\n\nSKILLS\n${skills.length ? skills.join(' · ') : '[Add relevant skills you can demonstrate]'}\n\nEXPERIENCE & PROJECTS\n${source}\n\nEDUCATION\n[Add qualification, institution, location, and completion date if applicable]`;
+  // A local audit has no reliable way to rewrite a person's history. Keep the
+  // supplied facts intact instead of fabricating a generic resume template.
+  const correctedResume = source;
   const score = Math.max(20, Math.min(90, 88 - issues.length * 6 + Math.min(skills.length, 5) * 2));
   return {
     atsScore: score,

@@ -47,7 +47,7 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      <div className="bg-[#121622] text-white p-4 rounded-2xl mt-6">
+      <div className="sidebar-reminder-card bg-[#121622] text-white p-4 rounded-2xl mt-6">
         <div className="flex items-center gap-2 font-semibold text-sm">
           <Flame className="text-[#FF6B00] fill-[#FF6B00]" size={18} />
           <span>{streak}-day streak</span>
@@ -55,7 +55,7 @@ export default function Sidebar() {
         <p className="text-xs text-gray-400 mt-1 mb-3">Best: {best} days</p>
         <button
           onClick={() => alert('Daily 8:00 PM placement reminder enabled!')}
-          className="w-full py-2 px-3 bg-white text-[#121622] rounded-xl text-xs font-semibold flex items-center justify-center gap-2 hover:bg-gray-100"
+          className="sidebar-reminder-button w-full py-2 px-3 bg-white text-[#121622] rounded-xl text-xs font-semibold flex items-center justify-center gap-2 hover:bg-gray-100"
         >
           <Bell size={14} /> Daily reminders
         </button>

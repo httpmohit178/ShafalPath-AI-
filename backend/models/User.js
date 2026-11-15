@@ -4,6 +4,8 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
+  passwordResetTokenHash: { type: String, default: '' },
+  passwordResetExpires: { type: Date, default: null },
   targetRole: { type: String, default: 'SDE' },
   avatar: { type: String, default: '🌱' },
   resumeText: { type: String, default: '' },

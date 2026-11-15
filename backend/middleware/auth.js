@@ -7,7 +7,7 @@ module.exports = async (req, res, next) => {
     if (!token) return res.status(401).json({ error: 'Unauthorized: No token provided' });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    const user = await User.findById(decoded.id).select('-password -passwordResetTokenHash -passwordResetExpires');
     if (!user) return res.status(401).json({ error: 'User not found' });
 
     const today = new Date().toISOString().split('T')[0];

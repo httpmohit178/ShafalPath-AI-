@@ -15,6 +15,7 @@ import Rewards from './pages/Rewards';
 import AuthPage from './pages/AuthPage';
 import ResumeBuilder from './pages/ResumeBuilder';
 import JobBoards from './pages/JobBoards';
+import ForgotPassword from './pages/ForgotPassword';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/register" element={<AuthPage mode="register" />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route element={<ProtectedLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/resume" element={<ResumeAnalyzer />} />
